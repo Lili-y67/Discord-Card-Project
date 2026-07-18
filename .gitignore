@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+logs.txt
+*.log
+npm-debug.log*
+*.db
+*.db-*
+data/guilds/
+.codex/
+.agents/
