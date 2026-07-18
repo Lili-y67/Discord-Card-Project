@@ -518,12 +518,12 @@ Fonctionnalités possibles pour plus tard :
 
 NewGenCard / Discord Card Project est une refonte et une évolution d'un projet de bot de cartes Discord existant.
 
-Remerciements au créateur du projet original pour la base d'idée et l'inspiration du système de collection.
+Projet provenant de BlitzCard développé par molo & Alminess que je remercie pour ce code & leur accord pour la modification.
 
 Projet original :
 
 ```txt
-Lien à compléter
+https://github.com/AlMiness/BlitzCards
 ```
 
 Repository actuel :
@@ -531,5 +531,3 @@ Repository actuel :
 ```txt
 https://github.com/Lili-y67/Discord-Card-Project
 ```
-
-Si le projet original contient une licence, elle doit être conservée et respectée dans ce repository.
