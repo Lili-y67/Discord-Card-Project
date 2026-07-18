@@ -518,7 +518,7 @@ Fonctionnalités possibles pour plus tard :
 
 NewGenCard / Discord Card Project est une refonte et une évolution d'un projet de bot de cartes Discord existant.
 
-Projet provenant de BlitzCard développé par molo & Alminess que je remercie pour ce code & leur accord pour la modification.
+Projet provenant de BlitzCard développé par AlMiness que je remercie pour ce code & leur accord pour la modification.
 
 Projet original :
 
