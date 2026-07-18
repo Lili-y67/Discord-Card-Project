@@ -120,6 +120,9 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	if(interaction.isStringSelectMenu()){
+		if(await client.commands.get("aide")?.handleHelpSelect?.(client, interaction)){
+			return;
+		}
 		if(await cardsListFunctions.handleCardsSelect(client, interaction)){
 			return;
 		}
