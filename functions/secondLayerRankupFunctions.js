@@ -6,6 +6,7 @@ const constants = require("../data/constants.js")
 const cardFunctions = require("../functions/secondLayerCardFunctions")
 const buttonCenter = require("../functions/buttonCenter")
 const transactionFunctions = require("../functions/secondLayerTransactionFunctions")
+const questCore = require("./questCore")
 
 const getConfirmationRankupEmbed = async (user, userDB) => {
     
@@ -92,6 +93,7 @@ const confirmRankup = async (client, currentInteraction, oldInteraction, customD
 
     await transactionFunctions.subMoney(customDataDictionary.user.id, constants.RANKIDTORANKPRICEDICO[userDB.rankID+1])
 	await apiDB.rankupAUser(customDataDictionary.user.id)
+    await questCore.trackEvent(customDataDictionary.user.id, "rank_up")
 	await oldInteraction.editReply({embeds:[(await getConfirmationRankupEmbed(customDataDictionary.user, userDB)).setTitle("Rankup effectué!")], components:[components]})
 	currentInteraction.deferUpdate()
     return
@@ -133,5 +135,4 @@ module.exports = {
 	getRankupConfirmationButtons,
     getMaxedRankEmbed
 };
-
 

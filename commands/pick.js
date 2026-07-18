@@ -1,6 +1,7 @@
 ﻿const { SlashCommandBuilder } = require('discord.js');
 
 const pickFunctions = require("../functions/secondLayerPickFunctions")
+const questCore = require("../functions/questCore")
 
 const apiDB = require("../functions/apiDB");
 
@@ -18,6 +19,7 @@ module.exports = {
 			return;
 		}
 		if(tryPick.picked){
+			await questCore.trackEvent(interaction.user.id, "card_picked")
 			await interaction.editReply({ embeds: tryPick.embeds});
 		}
 		else{

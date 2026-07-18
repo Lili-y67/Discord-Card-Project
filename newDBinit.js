@@ -40,6 +40,29 @@ const createPlayerDataTB = `CREATE TABLE IF NOT EXISTS "playersData" (
 	PRIMARY KEY("playerID" AUTOINCREMENT)
 );`;
 
+const createQuestUserStatsTB = `CREATE TABLE IF NOT EXISTS "questUserStats" (
+    "discordID" TEXT NOT NULL UNIQUE,
+    "xp" INTEGER DEFAULT 0,
+    "level" INTEGER DEFAULT 1,
+    "totalMessages" INTEGER DEFAULT 0,
+    "lastMessageXpStamp" INTEGER DEFAULT 0,
+    "lastQuestMessageStamp" INTEGER DEFAULT 0,
+    "wheelTickets" INTEGER DEFAULT 0,
+    "pickBoostUntil" INTEGER DEFAULT 0,
+    "pickBoostMultiplier" REAL DEFAULT 1,
+    PRIMARY KEY("discordID")
+);`;
+
+const createQuestDailyProgressTB = `CREATE TABLE IF NOT EXISTS "questDailyProgress" (
+    "discordID" TEXT NOT NULL,
+    "questDate" TEXT NOT NULL,
+    "questID" TEXT NOT NULL,
+    "progress" INTEGER DEFAULT 0,
+    "completed" INTEGER DEFAULT 0,
+    "claimed" INTEGER DEFAULT 0,
+    PRIMARY KEY("discordID", "questDate", "questID")
+);`;
+
 const readPlayersDataJSON = () => {
     if(!fs.existsSync(cardJSONPath)){
         return { playerData: {} }
@@ -62,8 +85,13 @@ DB.serialize(() => {
     DB.run(createCardsDataTB);
     DB.run(createOtherTB);
     DB.run(createPlayerDataTB);
+    DB.run(createQuestUserStatsTB);
+    DB.run(createQuestDailyProgressTB);
 
     DB.run(`ALTER TABLE "playersData" ADD COLUMN "discordID" TEXT`, () => {});
+    DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "lastQuestMessageStamp" INTEGER DEFAULT 0`, () => {});
+    DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "pickBoostUntil" INTEGER DEFAULT 0`, () => {});
+    DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "pickBoostMultiplier" REAL DEFAULT 1`, () => {});
 
 	const playerDataInsert = DB.prepare('INSERT OR REPLACE INTO "playersData" (playerID, discordID, playerName, playerEmote) VALUES(?,?,?,?)');
 	for (const id of playerIDs) {

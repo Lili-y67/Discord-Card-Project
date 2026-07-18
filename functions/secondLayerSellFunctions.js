@@ -7,6 +7,7 @@ const cardFunctions = require("../functions/secondLayerCardFunctions")
 const buttonCenter = require("../functions/buttonCenter")
 const transactionFunctions = require("../functions/secondLayerTransactionFunctions")
 const cardDisplay = require("./cardDisplay")
+const questCore = require("./questCore")
 
 const getConfirmationSellEmbed = async (cardID) => {
     let card = await apiDB.getACardFromID(cardID)
@@ -60,11 +61,13 @@ const expirationFunction = async (client, oldInteraction, customDataDictionary) 
 
 const confirmSell = async (client, currentInteraction, oldInteraction, customDataDictionary) => {
 
+    const soldCard = await apiDB.getACardFromID(customDataDictionary.cardID)
 	let givenMoney = await sellACard(customDataDictionary.cardID)
 
 	let components = buttonCenter.disableEveryButtonInActionRow(currentInteraction.message.components[0])
 
 	await oldInteraction.editReply({embeds:[await cardFunctions.getCardEmbed(client, customDataDictionary.cardID) ,getSoldEmbed(givenMoney)], components:[components]})
+    await questCore.trackEvent(soldCard.ownerID, "card_sold")
 	currentInteraction.deferUpdate()
 }
 
@@ -115,5 +118,3 @@ module.exports = {
     getConfirmationSellEmbed,
 	getSellConfirmationButtons
 };
-
-

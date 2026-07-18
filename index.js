@@ -1,6 +1,6 @@
 ﻿const fs = require('node:fs');
 const path = require('node:path');
-const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
+const { Client, Collection, Events, GatewayIntentBits, Partials } = require('discord.js');
 require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 
 const token = process.env.DISCORD_TOKEN;
@@ -15,11 +15,13 @@ const cardsListFunctions = require('./functions/secondLayerCardsListFunctions');
 const guildCollectionFunctions = require('./functions/secondLayerGuildCollectionFunctions');
 const apiDB = require("./functions/apiDB");
 const mentionSafety = require("./functions/mentionSafety");
+const questCore = require("./functions/questCore");
 
 const logFilePath = "./logs.txt"
 
 const client = new Client({
-	intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+	intents: Object.values(GatewayIntentBits),
+	partials: Object.values(Partials),
 	allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
 });
 
@@ -57,6 +59,15 @@ client.on('guildMemberAdd', async member => {
 			console.error(`Impossible d'ajouter automatiquement ${member.id} sur ${member.guild.id} :`, error);
 		}
 	});
+});
+
+client.on(Events.MessageCreate, async message => {
+	if(!message.guildId || message.author?.bot) return;
+	try {
+		await questCore.trackMessage(message);
+	} catch(error) {
+		console.error(`Erreur pendant le suivi de quête message pour ${message.author?.id}:`, error);
+	}
 });
 
 client.commands = new Collection();
@@ -167,6 +178,9 @@ client.on('interactionCreate', async interaction => {
 
 	try {
 		await command.execute(interaction);
+		if(["collection", "inv", "cards", "guildcollection"].includes(interaction.commandName)){
+			await questCore.trackEvent(interaction.user.id, "collection_viewed");
+		}
         console.log(interaction.commandName.toString() + " from " + interaction.user.username + " " + interaction.user.id.toString() + " -- ENDED at " + Date.now().toString() + " -- it took " + (Date.now()-startingDate).toString() + "ms")
 	} catch (error) {
 

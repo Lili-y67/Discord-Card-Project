@@ -18,6 +18,7 @@ const categoryChoices = [
     { name: 'Économie et progression', label: 'Économie et progression', value: 'economie', description: 'Argent, points, rangs et classements.' },
     { name: 'Échanges', label: 'Échanges', value: 'echanges', description: 'Faire un trade avec un membre.' },
     { name: 'Classements', label: 'Classements', value: 'classements', description: 'Comparer les soldes, points et collections.' },
+    { name: 'Quêtes et roue', label: 'Quêtes et roue', value: 'quetes', description: 'Progression, tickets et roue fortune.' },
     { name: 'Commandes spéciales', label: 'Commandes spéciales', value: 'speciales', description: 'Outils réservés ou commandes de service.' }
 ];
 
@@ -125,6 +126,16 @@ const helpPages = (cmd) => ({
             { name: cmd('profil', 'user:<membre>'), value: 'Résumé individuel du solde, des points et du rang.' }
         ]
     },
+    quetes: {
+        title: 'Quêtes et roue fortune',
+        description: 'Progressez autrement que par les tirages.',
+        fields: [
+            { name: cmd('quetes'), value: 'Affiche les quêtes du jour, votre niveau de quête, vos tickets et les récompenses prêtes.' },
+            { name: cmd('quetes', 'action:reclamer'), value: 'Récupère les récompenses des quêtes terminées.' },
+            { name: cmd('roue'), value: 'Consomme un ticket pour tourner la roue fortune.' },
+            { name: 'Exemples de progression', value: 'Messages envoyés, /pick réussi, /daily récupéré, vente, défausse, trade validé, rankup.' }
+        ]
+    },
     speciales: {
         title: 'Commandes spéciales',
         description: 'Commandes utiles mais réservées ou plus ponctuelles.',
@@ -145,6 +156,7 @@ const buildOverviewEmbed = (cmd) => new EmbedBuilder()
         { name: 'Démarrage rapide', value: `${cmd('pick')} -> ${cmd('daily')} -> ${cmd('inv')} -> ${cmd('profil')}` },
         { name: 'Examiner une carte', value: cmd('card', 'cardid:<numéro>') },
         { name: 'Parcourir les cartes', value: `${cmd('cards')} ou ${cmd('guildcollection')}` },
+        { name: 'Quêtes et roue', value: `${cmd('quetes')} puis ${cmd('roue')}` },
         { name: 'Catégories disponibles', value: categoryChoices.map(choice => `\`${choice.value}\``).join(' - ') }
     )
     .setFooter({ text: 'Le menu ci-dessous permet de changer de catégorie sans relancer /aide.' });

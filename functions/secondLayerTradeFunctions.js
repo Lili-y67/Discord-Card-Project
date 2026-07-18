@@ -6,6 +6,7 @@ const apiDB = require("./apiDB");
 const transactionFunctions = require("../functions/secondLayerTransactionFunctions")
 const blitzerFunctions = require("../functions/secondLayerBlitzersFunctions")
 const buttonCenter = require("../functions/buttonCenter")
+const questCore = require("./questCore")
 
 const constants = require("../data/constants")
 
@@ -174,12 +175,14 @@ const confirmTrade = async (client, currentInteraction, oldInteraction, customDa
         newTradeEmbed = currentInteraction.message.embeds[0].setTitle(`Ce trade entre ${customDataDictionary.proposingUser.username} et ${customDataDictionary.askedUser.username} a été effectué`).setColor(constants.CONFIRMEDTRADEEMBEDCOLOR)
 
         if(customDataDictionary.payer != "none"){
-            transactionFunctions.subMoney(customDataDictionary.payer == "proposing" ? customDataDictionary.proposingUser.id : customDataDictionary.askedUser.id, customDataDictionary.amount)
-            transactionFunctions.giveMoney(customDataDictionary.payer == "proposing" ? customDataDictionary.askedUser.id : customDataDictionary.proposingUser.id, customDataDictionary.amount)
+            await transactionFunctions.subMoney(customDataDictionary.payer == "proposing" ? customDataDictionary.proposingUser.id : customDataDictionary.askedUser.id, customDataDictionary.amount)
+            await transactionFunctions.giveMoney(customDataDictionary.payer == "proposing" ? customDataDictionary.askedUser.id : customDataDictionary.proposingUser.id, customDataDictionary.amount)
         }
 
         await apiDB.bulkChangeCardOwnership(customDataDictionary.proposedCardsIDList, customDataDictionary.askedUser.id)
         await apiDB.bulkChangeCardOwnership(customDataDictionary.askedCardsIDList, customDataDictionary.proposingUser.id)
+        await questCore.trackEvent(customDataDictionary.proposingUser.id, "trade_completed")
+        await questCore.trackEvent(customDataDictionary.askedUser.id, "trade_completed")
     }
     await apiDB.bulkUnlock(customDataDictionary.proposedCardsIDList)
     await apiDB.bulkUnlock(customDataDictionary.askedCardsIDList)

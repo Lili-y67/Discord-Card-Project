@@ -4,6 +4,8 @@ Bot Discord de collection de cartes, construit avec `discord.js` v14, `sqlite3` 
 
 Le bot permet aux membres d'un serveur de tirer des cartes représentant les membres du serveur, de les vendre, les échanger, les afficher, compléter une collection par rareté, gagner de l'argent, monter en rang et consulter les classements.
 
+Il ajoute aussi une boucle de progression avec quêtes quotidiennes, XP, niveaux de quête, tickets et roue fortune.
+
 ## Fonctionnement général
 
 NewGenCard repose sur trois idées principales :
@@ -118,6 +120,13 @@ npm run sync-members
 ```
 
 Synchronise les membres des serveurs accessibles par le bot.
+
+```bash
+/quetes
+/roue
+```
+
+`/quetes` affiche les quêtes du jour et `/roue` consomme un ticket gagné via les quêtes.
 
 ```bash
 npm run check
@@ -398,6 +407,8 @@ Le bot génère notamment :
 
 Le bot utilise l'intent `GuildMembers`.
 
+Le système de quêtes messages utilise aussi les événements de messages. Les gateways sont activés côté code, mais il faut vérifier dans le portail Discord Developer que les intents privilégiés nécessaires au bot sont activés.
+
 À vérifier dans le portail Discord Developer :
 
 - `SERVER MEMBERS INTENT` activé ;
@@ -412,6 +423,39 @@ La synchronisation se fait :
 - manuellement avec `npm run sync-members`.
 
 Pour éviter les rate limits Discord, `/guildcollection` ne force pas une resynchronisation massive à chaque appel. Il lit les membres déjà enregistrés en base.
+
+## Quêtes et roue fortune
+
+Les quêtes sont stockées par serveur dans SQLite.
+
+Commandes :
+
+```bash
+/quetes
+/quetes action:reclamer
+/roue
+```
+
+Progressions suivies :
+
+- messages envoyés ;
+- `/pick` ou `/buypick` réussi ;
+- `/daily` récupéré ;
+- consultation de `/inv`, `/collection`, `/cards` ou `/guildcollection` ;
+- carte vendue ;
+- carte défaussée ;
+- trade validé ;
+- rankup confirmé.
+
+Récompenses possibles :
+
+- argent ;
+- points de carte ;
+- XP de quête ;
+- tickets de roue ;
+- réduction temporaire du cooldown `/pick`.
+
+La roue fortune consomme un ticket et peut donner argent, points, XP, ticket bonus, jackpot ou boost temporaire du cooldown `/pick`.
 
 ## Déploiement des commandes
 

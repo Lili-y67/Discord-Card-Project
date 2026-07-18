@@ -5,6 +5,7 @@ const constants = require("../data/constants.js")
 
 const cardFunctions = require("../functions/secondLayerCardFunctions")
 const transactionFunctions = require("../functions/secondLayerTransactionFunctions")
+const questCore = require("./questCore")
 
 const CARD_MONEY_MULTIPLIER_SETTING = "cardMoneyMultiplier"
 const DAILY_MONEY_MULTIPLIER_SETTING = "dailyMoneyMultiplier"
@@ -26,7 +27,7 @@ const tryQuickPick = async (client, user) => {
 
     }
     else{
-        return {picked:false, nextPickTimestamp:getNextQuickPickTimestamp(client, userDB)}
+        return {picked:false, nextPickTimestamp:await getNextQuickPickTimestamp(client, userDB)}
     }
 }
 
@@ -88,11 +89,12 @@ const quickPick = async (client, discordID) => {
 }
 
 const isLateEnoughQuickPick = async (client, userDB) => { //required time en ms
-    return getNextQuickPickTimestamp(client, userDB) < Date.now() ? true : false
+    return await getNextQuickPickTimestamp(client, userDB) < Date.now() ? true : false
 }
 
-const getNextQuickPickTimestamp = (client, userDB) => {
-    return parseInt(userDB.lastQuickPick) + Math.trunc(constants.RANKIDTORANKQUICKPICKTIMEDICO[userDB.rankID] * client.quickPickTimeMultiplicator)
+const getNextQuickPickTimestamp = async (client, userDB) => {
+    const questPickMultiplier = await questCore.getPickCooldownMultiplier(userDB.discordID)
+    return parseInt(userDB.lastQuickPick) + Math.trunc(constants.RANKIDTORANKQUICKPICKTIMEDICO[userDB.rankID] * client.quickPickTimeMultiplicator * questPickMultiplier)
 }
 
 

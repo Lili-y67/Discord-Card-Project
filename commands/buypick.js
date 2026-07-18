@@ -2,6 +2,7 @@
 
 const pickFunctions = require("../functions/secondLayerPickFunctions")
 const constants = require("../data/constants.js")
+const questCore = require("../functions/questCore")
 
 const apiDB = require("../functions/apiDB");
 
@@ -28,6 +29,7 @@ module.exports = {
 			await interaction.editReply(buyPick.error)
 			return;
 		}
+        await questCore.trackEvent(interaction.user.id, "card_picked")
         await interaction.editReply({embeds:buyPick.embeds})
 	},
 };

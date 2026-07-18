@@ -7,6 +7,7 @@ const cardFunctions = require("../functions/secondLayerCardFunctions")
 const buttonCenter = require("../functions/buttonCenter")
 const transactionFunctions = require("../functions/secondLayerTransactionFunctions")
 const cardDisplay = require("./cardDisplay")
+const questCore = require("./questCore")
 
 const getConfirmationDiscardEmbed = async (cardID) => {
     let card = await apiDB.getACardFromID(cardID)
@@ -60,9 +61,11 @@ const expirationFunction = async (client, oldInteraction, customDataDictionary) 
 
 const confirmDiscard = async (client, currentInteraction, oldInteraction, customDataDictionary) => {
 
+	const discardedCard = await apiDB.getACardFromID(customDataDictionary.cardID)
 	let givenPoints = await discardACard(customDataDictionary.cardID)
 	let components = buttonCenter.disableEveryButtonInActionRow(currentInteraction.message.components[0])
 	await oldInteraction.editReply({embeds:[await cardFunctions.getCardEmbed(client, customDataDictionary.cardID),getDiscardedEmbed(givenPoints)], components:[components]})
+	await questCore.trackEvent(discardedCard.ownerID, "card_discarded")
 	currentInteraction.deferUpdate()
 }
 
@@ -113,5 +116,4 @@ module.exports = {
     getConfirmationDiscardEmbed,
 	getDiscardConfirmationButtons
 };
-
 

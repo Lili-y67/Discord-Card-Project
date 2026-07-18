@@ -1,6 +1,7 @@
 ﻿const { SlashCommandBuilder } = require('discord.js');
 
 const pickFunctions = require("../functions/secondLayerPickFunctions")
+const questCore = require("../functions/questCore")
 
 const apiDB = require("../functions/apiDB");
 
@@ -14,6 +15,7 @@ module.exports = {
 		await apiDB.prepareUser(interaction.user.id, interaction.user.username)
 		let tryDaily = await pickFunctions.tryDaily(interaction.user)
 		if(tryDaily.picked){
+			await questCore.trackEvent(interaction.user.id, "daily_claimed")
 			await interaction.editReply({ embeds: tryDaily.embeds});
 		}
 		else{

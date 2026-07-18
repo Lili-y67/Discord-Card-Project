@@ -11,6 +11,7 @@ const guildsDBDirectory = path.join(__dirname, '../data/guilds');
 const mainGuildID = process.env.GUILD_ID;
 const guildDBContext = new AsyncLocalStorage();
 const dbCache = new Map();
+const schemaReady = new Set();
 
 const getSafeGuildID = (guildID) => {
     const stringGuildID = guildID?.toString();
@@ -62,6 +63,8 @@ const usersDataTB = "usersData"
 const cardsDataTB = "cardsData"
 const otherTB = "other"
 const playersDataTB = "playersData"
+const questUserStatsTB = "questUserStats"
+const questDailyProgressTB = "questDailyProgress"
 const sqliteSequence = "sqlite_sequence"
 const legacyRarityMap = {
     Commune: constants.COMMONNAME,
@@ -70,6 +73,9 @@ const legacyRarityMap = {
 }
 
 const ensureDatabaseSchema = async () => {
+    const schemaKey = getDBPathForGuild()
+    if(schemaReady.has(schemaKey)) return
+
     await DB.run(`CREATE TABLE IF NOT EXISTS "${usersDataTB}"(
         "discordID" TEXT NOT NULL UNIQUE,
         "name" TEXT,
@@ -113,6 +119,40 @@ const ensureDatabaseSchema = async () => {
         "playerEmote" TEXT,
         PRIMARY KEY("playerID" AUTOINCREMENT)
     )`)
+
+    await DB.run(`CREATE TABLE IF NOT EXISTS "${questUserStatsTB}" (
+        "discordID" TEXT NOT NULL UNIQUE,
+        "xp" INTEGER DEFAULT 0,
+        "level" INTEGER DEFAULT 1,
+        "totalMessages" INTEGER DEFAULT 0,
+        "lastMessageXpStamp" INTEGER DEFAULT 0,
+        "lastQuestMessageStamp" INTEGER DEFAULT 0,
+        "wheelTickets" INTEGER DEFAULT 0,
+        "pickBoostUntil" INTEGER DEFAULT 0,
+        "pickBoostMultiplier" REAL DEFAULT 1,
+        PRIMARY KEY("discordID")
+    )`)
+
+    await DB.run(`CREATE TABLE IF NOT EXISTS "${questDailyProgressTB}" (
+        "discordID" TEXT NOT NULL,
+        "questDate" TEXT NOT NULL,
+        "questID" TEXT NOT NULL,
+        "progress" INTEGER DEFAULT 0,
+        "completed" INTEGER DEFAULT 0,
+        "claimed" INTEGER DEFAULT 0,
+        PRIMARY KEY("discordID", "questDate", "questID")
+    )`)
+
+    await addColumnIfMissing(questUserStatsTB, "lastQuestMessageStamp", "INTEGER DEFAULT 0")
+    await addColumnIfMissing(questUserStatsTB, "pickBoostUntil", "INTEGER DEFAULT 0")
+    await addColumnIfMissing(questUserStatsTB, "pickBoostMultiplier", "REAL DEFAULT 1")
+    schemaReady.add(schemaKey)
+}
+
+const addColumnIfMissing = async (tableName, columnName, definition) => {
+    const columns = await DB.all(`PRAGMA table_info("${tableName}")`)
+    if(columns.some(column => column.name == columnName)) return
+    await DB.run(`ALTER TABLE "${tableName}" ADD COLUMN "${columnName}" ${definition}`)
 }
 
 
@@ -540,6 +580,118 @@ const rankupAUser = async (discordID) => {
 
 //>user managements
 
+//quest managements<
+
+const prepareQuestUser = async (discordID) => {
+    await DB.run(
+        `INSERT INTO ${questUserStatsTB} (discordID)
+         SELECT ?
+         WHERE NOT EXISTS (SELECT 1 FROM ${questUserStatsTB} WHERE discordID = ?)`,
+        [discordID.toString(), discordID.toString()]
+    )
+}
+
+const getQuestUserStats = async (discordID) => {
+    await prepareQuestUser(discordID)
+    return await DB.get(`SELECT * FROM ${questUserStatsTB} WHERE discordID = ?`, [discordID.toString()])
+}
+
+const updateQuestUserStats = async (discordID, fields) => {
+    const entries = Object.entries(fields)
+    if(!entries.length) return
+    const setClause = entries.map(([field]) => `"${field}" = ?`).join(", ")
+    await DB.run(
+        `UPDATE ${questUserStatsTB} SET ${setClause} WHERE discordID = ?`,
+        [...entries.map(([, value]) => value), discordID.toString()]
+    )
+}
+
+const addQuestXP = async (discordID, amount) => {
+    await prepareQuestUser(discordID)
+    await DB.run(`UPDATE ${questUserStatsTB} SET xp = xp + ? WHERE discordID = ?`, [Number(amount) || 0, discordID.toString()])
+}
+
+const incrementQuestMessages = async (discordID, timestamp) => {
+    await prepareQuestUser(discordID)
+    await DB.run(
+        `UPDATE ${questUserStatsTB}
+         SET totalMessages = totalMessages + 1, lastQuestMessageStamp = ?
+         WHERE discordID = ?`,
+        [Number(timestamp) || Date.now(), discordID.toString()]
+    )
+}
+
+const addWheelTickets = async (discordID, amount) => {
+    await prepareQuestUser(discordID)
+    await DB.run(`UPDATE ${questUserStatsTB} SET wheelTickets = MAX(wheelTickets + ?, 0) WHERE discordID = ?`, [Number(amount) || 0, discordID.toString()])
+}
+
+const consumeWheelTicket = async (discordID) => {
+    const stats = await getQuestUserStats(discordID)
+    if(Number(stats.wheelTickets) <= 0) return false
+    await addWheelTickets(discordID, -1)
+    return true
+}
+
+const setPickBoost = async (discordID, multiplier, untilTimestamp) => {
+    await prepareQuestUser(discordID)
+    await updateQuestUserStats(discordID, {
+        pickBoostMultiplier: Number(multiplier) || 1,
+        pickBoostUntil: Number(untilTimestamp) || 0
+    })
+}
+
+const getActivePickBoostMultiplier = async (discordID) => {
+    const stats = await getQuestUserStats(discordID)
+    if(Number(stats.pickBoostUntil) > Date.now()){
+        return Math.max(Number(stats.pickBoostMultiplier) || 1, 0.05)
+    }
+    if(Number(stats.pickBoostUntil) > 0 || Number(stats.pickBoostMultiplier) != 1){
+        await setPickBoost(discordID, 1, 0)
+    }
+    return 1
+}
+
+const getDailyQuestProgressRows = async (discordID, questDate) => {
+    return await DB.all(
+        `SELECT * FROM ${questDailyProgressTB} WHERE discordID = ? AND questDate = ?`,
+        [discordID.toString(), questDate]
+    )
+}
+
+const getDailyQuestProgress = async (discordID, questDate, questID) => {
+    return await DB.get(
+        `SELECT * FROM ${questDailyProgressTB} WHERE discordID = ? AND questDate = ? AND questID = ?`,
+        [discordID.toString(), questDate, questID]
+    )
+}
+
+const upsertDailyQuestProgress = async (discordID, questDate, questID, progress, completed = 0, claimed = 0) => {
+    await DB.run(
+        `INSERT INTO ${questDailyProgressTB} (discordID, questDate, questID, progress, completed, claimed)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(discordID, questDate, questID)
+         DO UPDATE SET progress = excluded.progress, completed = excluded.completed, claimed = excluded.claimed`,
+        [discordID.toString(), questDate, questID, Number(progress) || 0, completed ? 1 : 0, claimed ? 1 : 0]
+    )
+}
+
+const markDailyQuestClaimed = async (discordID, questDate, questID) => {
+    await DB.run(
+        `UPDATE ${questDailyProgressTB}
+         SET claimed = 1
+         WHERE discordID = ? AND questDate = ? AND questID = ?`,
+        [discordID.toString(), questDate, questID]
+    )
+}
+
+const setQuestLevel = async (discordID, level) => {
+    await prepareQuestUser(discordID)
+    await DB.run(`UPDATE ${questUserStatsTB} SET level = ? WHERE discordID = ?`, [Number(level) || 1, discordID.toString()])
+}
+
+//>quest managements
+
 
 
 //time managements<
@@ -707,5 +859,19 @@ module.exports = {
     getOwnedCardsNumberOfAUser,
     rankupAUser,
     getPlayerDataFromID,
-    getGuildPlayersList
+    getGuildPlayersList,
+    prepareQuestUser,
+    getQuestUserStats,
+    updateQuestUserStats,
+    addQuestXP,
+    incrementQuestMessages,
+    addWheelTickets,
+    consumeWheelTicket,
+    setPickBoost,
+    getActivePickBoostMultiplier,
+    getDailyQuestProgressRows,
+    getDailyQuestProgress,
+    upsertDailyQuestProgress,
+    markDailyQuestClaimed,
+    setQuestLevel
 };
