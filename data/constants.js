@@ -31,7 +31,7 @@ const RARITIES = [
     { name: ARTIFACTNAME, shortName: "A", minValue: 99900, maxValue: 99979, weight: 80, sellPrice: 500, discardPoints: 100, playerColor: "#dddddd", statsColor: "#dddddd" },
     { name: SPECIALNAME, shortName: "S", minValue: 99980, maxValue: 99994, weight: 15, sellPrice: 1000, discardPoints: 200, playerColor: "#168FC9", statsColor: "#168FC9" },
     { name: ERRORCODENAME, shortName: "ERR", minValue: 99995, maxValue: 99999, weight: 5, sellPrice: null, discardPoints: null, playerColor: "#2B5596", statsColor: "#2B5596" },
-    { name: CRYSTALNAME, shortName: "CR", minValue: 100000, maxValue: 100000, weight: 1, sellPrice: 5000, discardPoints: 1000, playerColor: "#6fdbff", statsColor: "#6fdbff" }
+    { name: CRYSTALNAME, shortName: "CR", minValue: 100000, maxValue: 100000, weight: 1, sellPrice: 5000, discardPoints: 1000, playerColor: "#e1f6fd", statsColor: "#e1f6fd" }
 ]
 
 const RARITY_BY_NAME = Object.fromEntries(RARITIES.map(rarity => [rarity.name, rarity]))
