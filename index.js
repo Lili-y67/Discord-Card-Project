@@ -14,10 +14,14 @@ const inventoryFunctions = require('./functions/secondLayerInventoryFunctions');
 const cardsListFunctions = require('./functions/secondLayerCardsListFunctions');
 const guildCollectionFunctions = require('./functions/secondLayerGuildCollectionFunctions');
 const apiDB = require("./functions/apiDB");
+const mentionSafety = require("./functions/mentionSafety");
 
 const logFilePath = "./logs.txt"
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+const client = new Client({
+	intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+	allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
+});
 
 
 client.commands = new Collection();
@@ -157,7 +161,7 @@ client.on('interactionCreate', async interaction => {
 	if (!command) return;
 
 	if(client.blockBot&&interaction.commandName != "blockbot"){
-		interaction.reply("Le bot est actuellement en maintenance, merci de votre patience :)")
+		interaction.reply(mentionSafety.withSafeMentions({ content: "Le bot est actuellement en maintenance, merci de votre patience :)" }))
 		return;
 	}
 

@@ -1,4 +1,6 @@
 const COMPONENT_LIFETIME_MS = 120000;
+const DELETE_EXPIRED_MESSAGE_DELAY_MS = 60000;
+const mentionSafety = require("./mentionSafety");
 
 const createExpiresAt = () => Date.now() + COMPONENT_LIFETIME_MS;
 
@@ -22,6 +24,9 @@ const disableComponent = (component) => {
     const rawComponent = typeof component.toJSON == "function" ? component.toJSON() : JSON.parse(JSON.stringify(component));
     if([2, 3, 5, 6, 7, 8].includes(rawComponent.type)){
         rawComponent.disabled = true;
+    }
+    if(rawComponent.type == 2 && !rawComponent.label && !rawComponent.emoji){
+        rawComponent.emoji = { name: "⏹️" };
     }
     if(Array.isArray(rawComponent.components)){
         rawComponent.components = disableComponents(rawComponent.components);
@@ -50,14 +55,33 @@ const expireComponents = (components, commandName, commandID) => {
     return appendExpiredNotice(disableComponents(components), commandName, commandID);
 }
 
+const scheduleExpiredMessageDeletion = (interaction) => {
+    setTimeout(async () => {
+        try {
+            await interaction.fetchReply();
+            await interaction.deleteReply();
+        } catch(error) {
+            try {
+                if(interaction.message?.deletable){
+                    await interaction.message.delete();
+                }
+            } catch(deleteError) {
+                return;
+            }
+        }
+    }, DELETE_EXPIRED_MESSAGE_DELAY_MS);
+}
+
 const scheduleInteractionExpiration = (interaction, commandName, expiresAt) => {
     const delay = Math.max(Number(expiresAt) - Date.now(), 0);
     setTimeout(async () => {
         try {
             const reply = await interaction.fetchReply();
             await interaction.editReply({
-                components: expireComponents(reply.components, commandName, interaction.commandId)
+                components: expireComponents(reply.components, commandName, interaction.commandId),
+                allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
             });
+            scheduleExpiredMessageDeletion(interaction);
         } catch(error) {
             return;
         }
@@ -66,15 +90,19 @@ const scheduleInteractionExpiration = (interaction, commandName, expiresAt) => {
 
 const expireInteractedMessage = async (interaction, commandName, commandID) => {
     await interaction.update({
-        components: expireComponents(interaction.message.components, commandName, commandID)
+        components: expireComponents(interaction.message.components, commandName, commandID),
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     });
+    scheduleExpiredMessageDeletion(interaction);
 }
 
 module.exports = {
     COMPONENT_LIFETIME_MS,
+    DELETE_EXPIRED_MESSAGE_DELAY_MS,
     createExpiresAt,
     isExpired,
     scheduleInteractionExpiration,
     expireInteractedMessage,
-    expireComponents
+    expireComponents,
+    scheduleExpiredMessageDeletion
 };

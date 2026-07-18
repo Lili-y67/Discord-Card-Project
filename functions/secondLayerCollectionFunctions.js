@@ -4,16 +4,19 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageF
 const constants = require("../data/constants.js")
 const apiDB = require("./apiDB");
 const buttonCenter = require("../functions/buttonCenter")
+const mentionSafety = require("./mentionSafety");
 
 const COLLECTION_ACCENT_COLOR = 0xD72306;
-const HAS_MARK = "✓";
-const HASNT_MARK = "✘";
+const COLLECTION_PLAYERS_PER_PAGE = Math.min(constants.PLAYERSPERCOLLECTIONPAGE, 7);
+const HAS_MARK = "✅";
+const HASNT_MARK = "❌";
 
 const getCollectionReply = async (client, interaction, userCollection, currentPage, requestedUser) => {
     const buttonRows = await getSwitchPagesButtons(client, interaction, currentPage, userCollection, requestedUser);
     return {
         components: [await getCollectionContainer(userCollection, currentPage, requestedUser, buttonRows)],
-        flags: MessageFlags.IsComponentsV2
+        flags: MessageFlags.IsComponentsV2,
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     };
 }
 
@@ -33,20 +36,20 @@ const getCollectionContainer = async (userCollection, currentPage, user, buttonR
         );
     }
 
-    let totalPageNumber = keysNumber%constants.PLAYERSPERCOLLECTIONPAGE != 0 ? parseInt(keysNumber/constants.PLAYERSPERCOLLECTIONPAGE) + 1 : parseInt(keysNumber/constants.PLAYERSPERCOLLECTIONPAGE)
+    let totalPageNumber = keysNumber%COLLECTION_PLAYERS_PER_PAGE != 0 ? parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE) + 1 : parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE)
 
     if(currentPage > totalPageNumber) return
 
     let playerDataList = []
 
-    for(const playerID of playerIDs.slice(constants.PLAYERSPERCOLLECTIONPAGE * (currentPage - 1), constants.PLAYERSPERCOLLECTIONPAGE * currentPage)){
+    for(const playerID of playerIDs.slice(COLLECTION_PLAYERS_PER_PAGE * (currentPage - 1), COLLECTION_PLAYERS_PER_PAGE * currentPage)){
         playerDataList.push(apiDB.getPlayerDataFromID(playerID))
     }
 
     const resolvedPlayers = await Promise.all(playerDataList)
     for(const player of resolvedPlayers){
         container.addTextDisplayComponents(text =>
-            text.setContent(`${getPlayerDisplay(player)}\n\`\`\`txt\n${getRarityHeaderLine()}\n${getPlayerRarityStatusLine(userCollection[player.playerID] || {})}\n\`\`\``)
+            text.setContent(`${getPlayerDisplay(player)}\n${getPlayerRarityStatusText(userCollection[player.playerID] || {})}`)
         );
     }
 
@@ -95,11 +98,13 @@ const getSwitchPagesButtons = async (client, interaction, currentPage, userColle
         new ButtonBuilder()
         .setCustomId(previousPageButton)
         .setStyle(ButtonStyle.Primary)
+        .setLabel("Précédent")
         .setEmoji("⬅️"),
 
         new ButtonBuilder()
             .setCustomId(nextPageButtonID)
             .setStyle(ButtonStyle.Primary)
+            .setLabel("Suivant")
             .setEmoji("➡️"),
     );
 
@@ -107,7 +112,7 @@ const getSwitchPagesButtons = async (client, interaction, currentPage, userColle
         buttonRows.components[0].setDisabled(true)
     }
     let keysNumber = Object.keys(userCollection).length
-    const totalPageNumber = Math.max(1, keysNumber%constants.PLAYERSPERCOLLECTIONPAGE != 0 ? parseInt(keysNumber/constants.PLAYERSPERCOLLECTIONPAGE) + 1 : parseInt(keysNumber/constants.PLAYERSPERCOLLECTIONPAGE))
+    const totalPageNumber = Math.max(1, keysNumber%COLLECTION_PLAYERS_PER_PAGE != 0 ? parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE) + 1 : parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE))
     if(currentPage >= totalPageNumber){
         buttonRows.components[1].setDisabled(true)
     }
@@ -121,13 +126,13 @@ const expirationFunction = async (client, genesisInteraction, customDataDictiona
 
 const nextPageFunction = async (client, currentInteraction, genesisInteraction, customDataDictionary) => {
     let buttonRows = await getSwitchPagesButtons(client, genesisInteraction, customDataDictionary.currentPage + 1, customDataDictionary.userCollection, customDataDictionary.requestedUser)
-    await genesisInteraction.editReply({components:[await getCollectionContainer(customDataDictionary.userCollection, customDataDictionary.currentPage + 1, customDataDictionary.requestedUser, buttonRows)]})
+    await genesisInteraction.editReply(mentionSafety.withSafeMentions({components:[await getCollectionContainer(customDataDictionary.userCollection, customDataDictionary.currentPage + 1, customDataDictionary.requestedUser, buttonRows)]}))
     currentInteraction.deferUpdate()
 }
 
 const preivousPageFunction = async (client, currentInteraction, genesisInteraction, customDataDictionary) => {
     let buttonRows = await getSwitchPagesButtons(client, genesisInteraction, customDataDictionary.currentPage - 1, customDataDictionary.userCollection, customDataDictionary.requestedUser)
-    await genesisInteraction.editReply({components:[await getCollectionContainer(customDataDictionary.userCollection, customDataDictionary.currentPage - 1, customDataDictionary.requestedUser, buttonRows)]})
+    await genesisInteraction.editReply(mentionSafety.withSafeMentions({components:[await getCollectionContainer(customDataDictionary.userCollection, customDataDictionary.currentPage - 1, customDataDictionary.requestedUser, buttonRows)]}))
     currentInteraction.deferUpdate()
 }
 
@@ -176,27 +181,12 @@ const getEachRarityCardsNumbers = async (discordID) => {
 
 }
 
-const getPlayerRarityStatusLine = (playerCollection) => {
-    return constants.RARITIES
-        .map(rarity => centerText(playerCollection[rarity.name] ? HAS_MARK : HASNT_MARK, getRarityCellWidth(rarity)))
-        .join(" ")
-}
-
-const getRarityHeaderLine = () => {
-    return constants.RARITIES
-        .map(rarity => centerText(rarity.shortName, getRarityCellWidth(rarity)))
-        .join(" ")
-}
-
-const getRarityCellWidth = (rarity) => {
-    return Math.max(rarity.shortName.length, 3)
-}
-
-const centerText = (value, width) => {
-    const stringValue = value.toString()
-    const leftPadding = Math.floor((width - stringValue.length) / 2)
-    const rightPadding = width - stringValue.length - leftPadding
-    return `${" ".repeat(leftPadding)}${stringValue}${" ".repeat(rightPadding)}`
+const getPlayerRarityStatusText = (playerCollection) => {
+    const rarityStatusParts = constants.RARITIES.map(rarity => {
+        return `**${rarity.shortName}** ${playerCollection[rarity.name] ? HAS_MARK : HASNT_MARK}`
+    })
+    const splitIndex = Math.ceil(rarityStatusParts.length / 2)
+    return `${rarityStatusParts.slice(0, splitIndex).join(" · ")}\n${rarityStatusParts.slice(splitIndex).join(" · ")}`
 }
 
 const getPlayerDisplay = (playerData) => {

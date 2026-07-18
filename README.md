@@ -27,6 +27,7 @@ NewGenCard/
 ├─ functions/                  Logique métier du bot
 ├─ deploy-commands.js          Déploiement des slash commands
 ├─ deploy.js                   Wrapper court pour Pterodactyl
+├─ vps-start.js                Mise à jour Git + déploiement + démarrage VPS
 ├─ index.js                    Entrée principale du bot
 ├─ newDBinit.js                Initialisation/migration DB
 ├─ syncGuildPlayers.js         Synchronisation des membres
@@ -95,6 +96,12 @@ npm start
 Démarre le bot avec `node index.js`.
 
 ```bash
+npm run start:vps
+```
+
+Sur un VPS, fait une mise à jour Git propre, installe les dépendances, déploie les commandes, prépare la base puis démarre le bot.
+
+```bash
 npm run deploy
 ```
 
@@ -139,9 +146,38 @@ assets/
 
 Les bases serveur sont dans `data/guilds/`. Les supprimer remet les collections, cartes, monnaies et rangs à zéro pour les serveurs concernés.
 
-## Pterodactyl
+## VPS / Pterodactyl
 
-Startup recommandé :
+Startup recommandé si le dossier du VPS est connecté à Git :
+
+```bash
+node vps-start.js
+```
+
+Ce lanceur fait automatiquement :
+
+- `git fetch --all --prune`
+- `git pull --ff-only`
+- `npm install --omit=dev` ou `npm ci --omit=dev` si un `package-lock.json` existe
+- `node deploy-commands.js`
+- `node newDBinit.js`
+- `node index.js`
+
+Le `git pull --ff-only` évite les corrections dangereuses : si le VPS contient des modifications locales ou un historique différent, le script s'arrête au lieu d'écraser les fichiers ou les bases.
+
+Options utiles dans l'environnement du VPS :
+
+```env
+VPS_GIT_PULL=false
+VPS_NPM_INSTALL=false
+VPS_DEPLOY_COMMANDS=false
+VPS_INIT_DB=false
+VPS_PREPARE_ONLY=true
+```
+
+Chaque option désactive l'étape correspondante, sauf `VPS_PREPARE_ONLY=true` qui prépare le projet sans lancer le bot.
+
+Si vous ne voulez pas d'auto-update Git au démarrage, gardez l'ancien startup :
 
 ```bash
 node index.js
@@ -391,6 +427,12 @@ Ou sur Pterodactyl :
 node deploy.js
 ```
 
+Sur un VPS configuré pour l'auto-déploiement complet :
+
+```bash
+node vps-start.js
+```
+
 Si Discord renvoie :
 
 ```txt
@@ -501,6 +543,12 @@ Ou redémarrer le bot si nécessaire.
 - `npm run init-db` effectué.
 - `npm run deploy` effectué.
 - `npm start` fonctionne sans erreur critique.
+
+Avec le lanceur VPS, ces trois dernières étapes peuvent être remplacées par :
+
+```bash
+node vps-start.js
+```
 
 ## Idées prévues
 

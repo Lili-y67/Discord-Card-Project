@@ -13,6 +13,7 @@ const apiDB = require("./apiDB");
 const cardFunctions = require("./secondLayerCardFunctions");
 const componentLifecycle = require("./componentLifecycle");
 const constants = require("../data/constants.js");
+const mentionSafety = require("./mentionSafety");
 
 const PLAYERS_PER_PAGE = 25;
 const ACCENT_COLOR = 0xD72306;
@@ -25,7 +26,8 @@ const getGuildCollectionReply = async (user, page = 1, selectedPlayerID = null, 
 
     return {
         components: [getGuildCollectionContainer(user.id, players, currentPage, totalPages, selectedPlayer, expiresAt)],
-        flags: MessageFlags.IsComponentsV2
+        flags: MessageFlags.IsComponentsV2,
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     };
 }
 
@@ -159,7 +161,8 @@ const handleGuildCollectionSelect = async (client, interaction) => {
         await interaction.followUp({
             content: `Aperçu ${rarityName} de ${getPlayerDisplay(playerData)}`,
             files: [previewImage],
-            flags: MessageFlags.Ephemeral
+            flags: MessageFlags.Ephemeral,
+            allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
         });
         return true;
     }
@@ -172,7 +175,8 @@ const canUserInteract = async (interaction, userID) => {
 
     await interaction.reply({
         content: "Cette collection de serveur ne t'appartient pas.",
-        flags: MessageFlags.Ephemeral
+        flags: MessageFlags.Ephemeral,
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     });
     return false;
 }

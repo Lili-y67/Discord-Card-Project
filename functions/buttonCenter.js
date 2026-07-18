@@ -1,8 +1,8 @@
 ﻿const crypto = require('crypto');
-const { ActionRowBuilder, ButtonBuilder } = require('discord.js');
 const constants = require("../data/constants.js")
 const apiDB = require("./apiDB")
 const componentLifecycle = require("./componentLifecycle")
+const mentionSafety = require("./mentionSafety")
 
 
 const buttonRedirector = async (client, interaction) => {   //centre de redirection des boutons lorsqu'on clique dessus
@@ -74,8 +74,10 @@ const scheduleButtonGroupExpiration = (client, buttonGroupID) => {
         try {
             const reply = await buttonGroup.interaction.fetchReply()
             await buttonGroup.interaction.editReply({
-                components: componentLifecycle.expireComponents(reply.components, buttonGroup.interaction.commandName, buttonGroup.interaction.commandId)
+                components: componentLifecycle.expireComponents(reply.components, buttonGroup.interaction.commandName, buttonGroup.interaction.commandId),
+                allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
             })
+            componentLifecycle.scheduleExpiredMessageDeletion(buttonGroup.interaction)
         } catch(error) {
             // Certaines expirations modifient déjà le message ou ne gardent pas de réponse éditable.
         }
@@ -169,21 +171,16 @@ const desactivateButtonsOfAMessage = async (interaction) => {   //désactive les
         return;
     }
     let components = disableEveryComponents(interaction.message.components)
-    await interaction.message.edit({components:components})
+    await interaction.message.edit(mentionSafety.withSafeMentions({components:components}))
     interaction.deferUpdate()
 }
 
 const disableEveryComponents = (components) => {
-    for(let componentIndex = 0; componentIndex<components.length; componentIndex++){
-        components[componentIndex] = disableEveryButtonInActionRow(components[componentIndex])
-	}
-    return components
+    return componentLifecycle.expireComponents(components, "la commande", null)
 }
 
 const disableEveryButtonInActionRow = (actionRow) => {
-	return ActionRowBuilder.from(actionRow).setComponents(
-		actionRow.components.map(component => ButtonBuilder.from(component).setDisabled(true))
-	)
+	return componentLifecycle.expireComponents([actionRow], "la commande", null)[0]
 }
 
 module.exports = {
@@ -193,7 +190,3 @@ module.exports = {
     disableEveryButtonInActionRow,
     forcePurgeClientDictionaries
 };
-
-
-
-

@@ -12,6 +12,7 @@ const cardFunctions = require("./secondLayerCardFunctions");
 const cardDisplay = require("./cardDisplay");
 const componentLifecycle = require("./componentLifecycle");
 const constants = require("../data/constants.js");
+const mentionSafety = require("./mentionSafety");
 
 const CARDS_PER_PAGE = 25;
 const SORT_NUMBER = "numero";
@@ -26,7 +27,8 @@ const getCardsReply = async (client, user, sort = SORT_NUMBER, page = 1, expires
     if(cards.length == 0){
         return {
             content: "Aucune carte n'est enregistrée pour le moment.",
-            components: []
+            components: [],
+            allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
         };
     }
 
@@ -35,7 +37,8 @@ const getCardsReply = async (client, user, sort = SORT_NUMBER, page = 1, expires
         components: [
             getCardsSelectRow(user.id, normalizedSort, currentPage, cards, expiresAt),
             getCardsNavigationRow(user.id, normalizedSort, currentPage, totalPages, expiresAt)
-        ]
+        ],
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     };
 }
 
@@ -126,7 +129,8 @@ const handleCardsSelect = async (client, interaction) => {
         await interaction.update(await getCardsReply(client, user, parsedInteraction.sort, parsedInteraction.page, parsedInteraction.expiresAt));
         await interaction.followUp({
             content: `La carte numéro ${selectedCardID} n'existe plus.`,
-            flags: MessageFlags.Ephemeral
+            flags: MessageFlags.Ephemeral,
+            allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
         });
         return true;
     }
@@ -135,7 +139,8 @@ const handleCardsSelect = async (client, interaction) => {
     await interaction.update(await getCardsReply(client, user, parsedInteraction.sort, parsedInteraction.page, parsedInteraction.expiresAt));
     await interaction.followUp({
         embeds: [await cardFunctions.getCardEmbed(client, selectedCardID)],
-        flags: MessageFlags.Ephemeral
+        flags: MessageFlags.Ephemeral,
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     });
     return true;
 }
@@ -145,7 +150,8 @@ const canUserInteract = async (interaction, userID) => {
 
     await interaction.reply({
         content: "Ce catalogue ne t'appartient pas.",
-        flags: MessageFlags.Ephemeral
+        flags: MessageFlags.Ephemeral,
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     });
     return false;
 }

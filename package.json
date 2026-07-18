@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:vps": "node vps-start.js",
     "deploy": "node deploy-commands.js",
     "sync-members": "node syncGuildPlayers.js",
     "init-db": "node newDBinit.js",

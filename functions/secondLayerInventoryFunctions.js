@@ -12,6 +12,7 @@ const cardFunctions = require("./secondLayerCardFunctions");
 const cardDisplay = require("./cardDisplay");
 const componentLifecycle = require("./componentLifecycle");
 const constants = require("../data/constants.js");
+const mentionSafety = require("./mentionSafety");
 
 const INVENTORY_CARDS_PER_PAGE = 5;
 const INVENTORY_ACCENT_COLOR = 0xD72306;
@@ -23,7 +24,8 @@ const getInventoryReply = async (client, user, page = 1, expiresAt = componentLi
 
     return {
         components: [await getInventoryContainer(client, user, cards, currentPage, totalPages, expiresAt)],
-        flags: MessageFlags.IsComponentsV2
+        flags: MessageFlags.IsComponentsV2,
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     };
 }
 
@@ -133,7 +135,8 @@ const handleInventoryButton = async (client, interaction) => {
     if(interaction.user.id != parsedButton.userID){
         await interaction.reply({
             content: "Cet inventaire ne t'appartient pas.",
-            flags: MessageFlags.Ephemeral
+            flags: MessageFlags.Ephemeral,
+            allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
         });
         return true;
     }
@@ -143,14 +146,16 @@ const handleInventoryButton = async (client, interaction) => {
         if(!card || card.ownerID != interaction.user.id){
             await interaction.reply({
                 content: "Cette carte n'est plus dans ton inventaire.",
-                flags: MessageFlags.Ephemeral
+                flags: MessageFlags.Ephemeral,
+                allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
             });
             return true;
         }
 
         await interaction.reply({
             embeds: [await cardFunctions.getCardEmbed(client, parsedButton.value)],
-            flags: MessageFlags.Ephemeral
+            flags: MessageFlags.Ephemeral,
+            allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
         });
         return true;
     }
@@ -158,7 +163,7 @@ const handleInventoryButton = async (client, interaction) => {
     if(parsedButton.action == "page"){
         const user = await client.users.fetch(parsedButton.userID);
         const inventoryReply = await getInventoryReply(client, user, parsedButton.value, parsedButton.expiresAt);
-        await interaction.update({ components: inventoryReply.components });
+        await interaction.update(mentionSafety.withSafeMentions({ components: inventoryReply.components }));
         return true;
     }
 
