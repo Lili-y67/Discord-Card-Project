@@ -40,7 +40,7 @@ client.once(Events.ClientReady, async () => {
 	console.log('Ready!');
 	try {
 		const result = await guildPlayerSync.syncAllGuildPlayers(client);
-		console.log(`Synchronisation au démarrage : ${result.guilds} serveur(s), ${result.added} ajouté(s), ${result.updated} mis à jour, ${result.total} membre(s) au total.`);
+		console.log(`Synchronisation au démarrage : ${result.guilds} serveur(s), ${result.added} ajouté(s), ${result.updated} mis à jour, ${result.removed} retiré(s), ${result.total} membre(s) au total.`);
 	} catch(error) {
 		console.error('Erreur pendant la synchronisation des membres au démarrage :', error);
 	}
@@ -57,6 +57,20 @@ client.on('guildMemberAdd', async member => {
 			}
 		} catch(error) {
 			console.error(`Impossible d'ajouter automatiquement ${member.id} sur ${member.guild.id} :`, error);
+		}
+	});
+});
+
+client.on('guildMemberRemove', async member => {
+	await apiDB.withGuild(member.guild.id, async () => {
+		if(member.user.bot) return;
+		try {
+			const result = await guildPlayerSync.removeGuildMember(member);
+			if(result.removed){
+				console.log(`Joueur retiré automatiquement sur ${member.guild.id} : ${result.playerName} (${member.id}) - playerID ${result.playerID}`);
+			}
+		} catch(error) {
+			console.error(`Impossible de retirer automatiquement ${member.id} sur ${member.guild.id} :`, error);
 		}
 	});
 });
@@ -117,7 +131,16 @@ console.log(client.commands.get("testadmin").defaultPermission);
 client.on('interactionCreate', async interaction => {
 	await apiDB.withGuild(interaction.guildId, async () => {
 
+	if(interaction.isModalSubmit()){
+		if(await client.commands.get("config")?.handleConfigModal?.(client, interaction)){
+			return;
+		}
+	}
+
 	if(interaction.isButton()){
+		if(await client.commands.get("config")?.handleConfigButton?.(client, interaction)){
+			return;
+		}
 		if(await inventoryFunctions.handleInventoryButton(client, interaction)){
 			return;
 		}
@@ -135,6 +158,9 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	if(interaction.isStringSelectMenu()){
+		if(await client.commands.get("config")?.handleConfigSelect?.(client, interaction)){
+			return;
+		}
 		if(await client.commands.get("aide")?.handleHelpSelect?.(client, interaction)){
 			return;
 		}

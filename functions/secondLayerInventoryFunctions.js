@@ -34,7 +34,7 @@ const getInventoryContainer = async (client, user, cards, currentPage, totalPage
     const container = new ContainerBuilder()
         .setAccentColor(INVENTORY_ACCENT_COLOR)
         .addTextDisplayComponents(text =>
-            text.setContent(`Cartes de ${user.username}`)
+            text.setContent(`Cartes de <@${user.id}>`)
         )
         .addSeparatorComponents(new SeparatorBuilder())
         .addTextDisplayComponents(text =>

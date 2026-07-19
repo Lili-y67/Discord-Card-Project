@@ -41,10 +41,16 @@ module.exports = {
         const value = interaction.options.getNumber('valeur', true);
         const settingName = SETTING_NAMES[type];
 
-        await apiDB.setPersistentSetting(settingName, value);
+        await apiDB.withGuild(getConfigGuildID(interaction), async () => {
+            await apiDB.setPersistentSetting(settingName, value);
+        });
         await interaction.reply({
             content: `Le multiplicateur des gains ${type === 'daily' ? 'du /daily' : 'des cartes'} est maintenant de x${value}.`,
             ephemeral: true
         });
     }
 };
+
+const getConfigGuildID = (interaction) => {
+    return interaction.client.mainGuildID || interaction.guildId;
+}

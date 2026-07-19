@@ -141,7 +141,6 @@ const helpPages = (cmd) => ({
         description: 'Commandes utiles mais réservées ou plus ponctuelles.',
         fields: [
             { name: cmd('forcepick'), value: 'Tire une carte sans attendre le cooldown. Réservée au propriétaire du bot.' },
-            { name: cmd('multiplier', 'type:<daily|cartes> valeur:<nombre>'), value: 'Modifie les multiplicateurs de gains. Réservée au propriétaire du bot.' },
             { name: cmd('master'), value: 'Commande de service du bot.' },
             { name: cmd('aide'), value: 'Affiche cette aide avec le menu de catégories.' }
         ]

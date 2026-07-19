@@ -9,6 +9,7 @@ const questCore = require("./questCore")
 
 const CARD_MONEY_MULTIPLIER_SETTING = "cardMoneyMultiplier"
 const DAILY_MONEY_MULTIPLIER_SETTING = "dailyMoneyMultiplier"
+const PICK_BASE_TIMER_SETTING = "pickBaseTimerMs"
 
 const tryQuickPick = async (client, user) => {
 
@@ -94,25 +95,44 @@ const isLateEnoughQuickPick = async (client, userDB) => { //required time en ms
 
 const getNextQuickPickTimestamp = async (client, userDB) => {
     const questPickMultiplier = await questCore.getPickCooldownMultiplier(userDB.discordID)
-    return parseInt(userDB.lastQuickPick) + Math.trunc(constants.RANKIDTORANKQUICKPICKTIMEDICO[userDB.rankID] * client.quickPickTimeMultiplicator * questPickMultiplier)
+    const rankBaseTimer = constants.RANKIDTORANKQUICKPICKTIMEDICO[1] * client.quickPickTimeMultiplicator
+    const configuredBaseTimer = await apiDB.getPersistentSetting(PICK_BASE_TIMER_SETTING, rankBaseTimer)
+    const rankTimerRatio = (constants.RANKIDTORANKQUICKPICKTIMEDICO[userDB.rankID] || constants.RANKIDTORANKQUICKPICKTIMEDICO[1]) / constants.RANKIDTORANKQUICKPICKTIMEDICO[1]
+    return parseInt(userDB.lastQuickPick) + Math.trunc(configuredBaseTimer * rankTimerRatio * questPickMultiplier)
 }
 
 
 
 const cardChooser = async (minValue, maxValue) => {
 
-    let rarityValue = Math.floor(Math.random()*(1+maxValue-minValue))+minValue
-
-    let playerNumber = await apiDB.getLastPickablePlayerID()
-    if(!playerNumber || playerNumber < 1){
+    let randomPlayerID = await apiDB.getRandomPickablePlayerID()
+    if(!randomPlayerID){
         throw new Error("Aucun joueur n'est configuré dans la base.")
     }
 
-    let randomPlayerID = Math.floor(Math.random()*(playerNumber))+1
-
-    let rarity = getRarityFromRarityValue(rarityValue);
+    const rarityRows = await apiDB.getRarityWeightRows()
+    const eligibleRows = rarityRows.filter(row =>
+        row.rarity.maxValue >= minValue && row.rarity.minValue <= maxValue
+    )
+    const chosenRow = chooseWeightedRarity(eligibleRows.length ? eligibleRows : rarityRows)
+    const rarityMinValue = Math.max(chosenRow.rarity.minValue, minValue)
+    const rarityMaxValue = Math.min(chosenRow.rarity.maxValue, maxValue)
+    let rarityValue = Math.floor(Math.random()*(1+rarityMaxValue-rarityMinValue))+rarityMinValue
+    let rarity = chosenRow.rarity.name;
 
     return {playerID:randomPlayerID, rarity:rarity, rarityValue:rarityValue}
+}
+
+const chooseWeightedRarity = (rarityRows) => {
+    const totalWeight = rarityRows.reduce((total, row) => total + Math.max(Number(row.weight) || 0, 0), 0)
+    if(totalWeight <= 0) return { rarity: constants.RARITIES[0], weight: constants.RARITIES[0].weight }
+
+    let randomWeight = Math.random() * totalWeight
+    for(const row of rarityRows){
+        randomWeight -= Math.max(Number(row.weight) || 0, 0)
+        if(randomWeight <= 0) return row
+    }
+    return rarityRows[rarityRows.length - 1]
 }
 
 

@@ -20,18 +20,19 @@ const ACCENT_COLOR = 0xD72306;
 
 const getGuildCollectionReply = async (user, page = 1, selectedPlayerID = null, expiresAt = componentLifecycle.createExpiresAt()) => {
     const players = await apiDB.getGuildPlayersList();
+    const probabilities = await apiDB.getRarityProbabilityRows();
     const totalPages = getTotalPages(players.length);
     const currentPage = clampPage(page, totalPages);
     const selectedPlayer = selectedPlayerID ? players.find(player => player.playerID == selectedPlayerID) : null;
 
     return {
-        components: [getGuildCollectionContainer(user.id, players, currentPage, totalPages, selectedPlayer, expiresAt)],
+        components: [getGuildCollectionContainer(user.id, players, currentPage, totalPages, selectedPlayer, expiresAt, probabilities)],
         flags: MessageFlags.IsComponentsV2,
         allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
     };
 }
 
-const getGuildCollectionContainer = (userID, players, currentPage, totalPages, selectedPlayer, expiresAt) => {
+const getGuildCollectionContainer = (userID, players, currentPage, totalPages, selectedPlayer, expiresAt, probabilities) => {
     const pagePlayers = players.slice(PLAYERS_PER_PAGE * (currentPage - 1), PLAYERS_PER_PAGE * currentPage);
     const container = new ContainerBuilder()
         .setAccentColor(ACCENT_COLOR)
@@ -59,7 +60,7 @@ const getGuildCollectionContainer = (userID, players, currentPage, totalPages, s
             .addTextDisplayComponents(text =>
                 text.setContent(`Aperçus pour ${getPlayerDisplay(selectedPlayer)}`)
             )
-            .addActionRowComponents(getRaritySelectRow(userID, selectedPlayer.playerID, currentPage, expiresAt));
+            .addActionRowComponents(getRaritySelectRow(userID, selectedPlayer.playerID, currentPage, expiresAt, probabilities));
     }
 
     return container;
@@ -79,16 +80,17 @@ const getPlayerSelectRow = (userID, currentPage, players, expiresAt) => {
     return new ActionRowBuilder().addComponents(selectMenu);
 }
 
-const getRaritySelectRow = (userID, playerID, currentPage, expiresAt) => {
+const getRaritySelectRow = (userID, playerID, currentPage, expiresAt, probabilities) => {
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(getGuildCollectionCustomID("rarity", userID, currentPage, playerID, expiresAt))
         .setPlaceholder("Choisir une rareté à prévisualiser")
-        .addOptions(constants.RARITIES.map(rarity =>
-            new StringSelectMenuOptionBuilder()
+        .addOptions(constants.RARITIES.map(rarity => {
+            const probability = probabilities.find(row => row.name == rarity.name)?.probability || 0;
+            return new StringSelectMenuOptionBuilder()
                 .setLabel(rarity.name)
-                .setDescription(`${(rarity.weight / constants.RARITY_CHANCE_TOTAL * 100).toFixed(3)}%`)
-                .setValue(rarity.name)
-        ));
+                .setDescription(`${formatPercent(probability)}%`)
+                .setValue(rarity.name);
+        }));
 
     return new ActionRowBuilder().addComponents(selectMenu);
 }
@@ -219,6 +221,10 @@ const truncateString = (value, maximumLength) => {
     const stringValue = value.toString();
     if(stringValue.length <= maximumLength) return stringValue;
     return stringValue.slice(0, maximumLength - 3) + "...";
+}
+
+const formatPercent = (value) => {
+    return Number(value || 0).toFixed(4).replace(/\.?0+$/, "");
 }
 
 module.exports = {

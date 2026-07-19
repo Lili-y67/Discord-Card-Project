@@ -350,7 +350,6 @@ Bonus actuels :
 | Commande | Description |
 |---|---|
 | `/master` | Commande spéciale |
-| `/multiplier` | Modifie le multiplicateur des gains |
 
 ## Commandes admin
 
@@ -359,6 +358,7 @@ Les commandes admin sont dans `adminCommands/` et sont déployées sur `GUILD_ID
 | Commande | Description |
 |---|---|
 | `/blockbot` | Active/désactive le mode maintenance |
+| `/config` | Ouvre le panneau de configuration admin |
 | `/forcelock` | Verrouille une carte |
 | `/forceunlock` | Déverrouille une carte |
 | `/givecardpoints` | Ajoute des points à un joueur |
@@ -367,6 +367,9 @@ Les commandes admin sont dans `adminCommands/` et sont déployées sur `GUILD_ID
 | `/submoney` | Retire de l'argent à un joueur |
 | `/modif` | Modifie une carte existante |
 | `/pickfor` | Tire une carte pour un utilisateur |
+| `/multiplier` | Modifie le multiplicateur des gains |
+| `/pick-timer` | Change le timer de base du `/pick` |
+| `/probability` | Change la probabilité d'une rareté |
 | `/setlastpickableplayerid` | Change l'ID du dernier joueur tirable |
 | `/setqptimemultiplicator` | Change le multiplicateur de cooldown pick |
 | `/updatecardimage` | Régénère l'image d'une carte |

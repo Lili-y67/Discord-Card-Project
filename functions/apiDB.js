@@ -464,6 +464,16 @@ const getGuildPlayersList = async () => {
     )
 }
 
+const getRandomPickablePlayerID = async () => {
+    const row = await DB.get(
+        `SELECT playerID FROM ${playersDataTB}
+         WHERE discordID IS NOT NULL
+         ORDER BY RANDOM()
+         LIMIT 1`
+    )
+    return row ? row.playerID : 0
+}
+
 //>playersNames
 
 
@@ -750,6 +760,61 @@ const setPersistentSetting = async (dataName, value) => {
     )
 }
 
+const getRarityWeightSettingName = (rarityName) => {
+    return `rarityWeight:${rarityName}`
+}
+
+const getRarityWeightRows = async () => {
+    const rows = await Promise.all(constants.RARITIES.map(async rarity => ({
+        rarity,
+        weight: await getPersistentSetting(getRarityWeightSettingName(rarity.name), rarity.weight)
+    })))
+    return rows.map(row => ({
+        ...row,
+        weight: Number(row.weight) > 0 ? Number(row.weight) : row.rarity.weight
+    }))
+}
+
+const getRarityProbabilityRows = async () => {
+    const rows = await getRarityWeightRows()
+    const totalWeight = rows.reduce((total, row) => total + row.weight, 0)
+    return rows.map(row => ({
+        name: row.rarity.name,
+        shortName: row.rarity.shortName,
+        weight: row.weight,
+        probability: totalWeight > 0 ? row.weight / totalWeight * 100 : 0
+    }))
+}
+
+const setRarityProbability = async (rarityName, probabilityPercent) => {
+    const rarity = constants.RARITY_BY_NAME[rarityName]
+    const probability = Number(probabilityPercent)
+    if(!rarity){
+        return { ok: false, error: "Rareté inconnue." }
+    }
+    if(!Number.isFinite(probability) || probability <= 0 || probability > 75){
+        return { ok: false, error: "La probabilité doit être un nombre entre 0.0001 et 75%." }
+    }
+
+    const rows = await getRarityWeightRows()
+    const targetRow = rows.find(row => row.rarity.name == rarityName)
+    const otherWeight = rows
+        .filter(row => row.rarity.name != rarityName)
+        .reduce((total, row) => total + row.weight, 0)
+
+    if(!targetRow || otherWeight <= 0){
+        return { ok: false, error: "Impossible de recalculer les poids des raretés." }
+    }
+
+    const probabilityRatio = probability / 100
+    const newWeight = probabilityRatio * otherWeight / (1 - probabilityRatio)
+    await setPersistentSetting(getRarityWeightSettingName(rarityName), newWeight)
+
+    const updatedRows = await getRarityProbabilityRows()
+    const updatedRow = updatedRows.find(row => row.name == rarityName)
+    return { ok: true, rarityName, probability: updatedRow?.probability ?? probability, weight: newWeight }
+}
+
 const upsertGuildPlayer = async (discordID, playerName) => {
     const existingPlayer = await DB.get(
         `SELECT playerID, playerName FROM ${playersDataTB} WHERE discordID = ? LIMIT 1`,
@@ -788,6 +853,17 @@ const upsertGuildPlayer = async (discordID, playerName) => {
         [discordID]
     )
     return { added: true, updated: false, playerID: insertedPlayer.playerID }
+}
+
+const removeGuildPlayerByDiscordID = async (discordID) => {
+    const existingPlayer = await DB.get(
+        `SELECT playerID, playerName FROM ${playersDataTB} WHERE discordID = ? LIMIT 1`,
+        [discordID.toString()]
+    )
+    if(!existingPlayer) return { removed: false, playerID: null, playerName: null }
+
+    await DB.run(`DELETE FROM ${playersDataTB} WHERE playerID = ?`, [existingPlayer.playerID])
+    return { removed: true, playerID: existingPlayer.playerID, playerName: existingPlayer.playerName }
 }
 
 const refreshLastPickablePlayerID = async () => {
@@ -845,8 +921,12 @@ module.exports = {
     setLastPickablePlayerID,
     getPersistentSetting,
     setPersistentSetting,
+    getRarityWeightRows,
+    getRarityProbabilityRows,
+    setRarityProbability,
     ensureDatabaseSchema,
     upsertGuildPlayer,
+    removeGuildPlayerByDiscordID,
     refreshLastPickablePlayerID,
     updateUserName,
     addPointsToUser,
@@ -860,6 +940,7 @@ module.exports = {
     rankupAUser,
     getPlayerDataFromID,
     getGuildPlayersList,
+    getRandomPickablePlayerID,
     prepareQuestUser,
     getQuestUserStats,
     updateQuestUserStats,
