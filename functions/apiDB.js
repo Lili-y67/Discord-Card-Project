@@ -746,6 +746,11 @@ const setLastPickablePlayerID = async(newPlayerID) => {
 
 const getPersistentSetting = async (dataName, defaultValue = 1) => {
     const row = await DB.get(`SELECT data FROM ${otherTB} WHERE dataName = ?`, [dataName])
+    if(!row) return defaultValue
+    if(typeof defaultValue == "string"){
+        return row.data == null ? defaultValue : row.data.toString()
+    }
+
     const value = Number(row?.data)
     return Number.isFinite(value) ? value : defaultValue
 }

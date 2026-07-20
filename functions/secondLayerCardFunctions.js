@@ -414,7 +414,7 @@ const roundedRect = (ctx, x, y, width, height, radius) => {
 	ctx.closePath()
 }
 
-const updateCardImageURL = async (clientBot, cardID) => {
+const getCardImageStorageChannel = async (clientBot) => {
 	const storageGuildID = await apiDB.getPersistentSetting(IMAGES_STORAGE_GUILD_SETTING, clientBot.imagesStorageGuildID || "")
 	const storageChannelID = await apiDB.getPersistentSetting(IMAGES_STORAGE_CHANNEL_SETTING, clientBot.imagesStorageChannelID || "")
 
@@ -422,8 +422,25 @@ const updateCardImageURL = async (clientBot, cardID) => {
 		throw new Error("Configure un salon de stockage avec /config ou renseigne IMAGES_STORAGE_GUILD_ID et IMAGES_STORAGE_CHANNEL_ID dans .env")
 	}
 
-	let storageGuild = await clientBot.guilds.fetch(storageGuildID)
-	let storageChannel = await storageGuild.channels.fetch(storageChannelID)
+	try {
+		const storageGuild = await clientBot.guilds.fetch(storageGuildID.toString())
+		if(!storageGuild?.channels?.fetch){
+			throw new Error(`serveur ${storageGuildID} introuvable ou inaccessible`)
+		}
+
+		const storageChannel = await storageGuild.channels.fetch(storageChannelID.toString())
+		if(!storageChannel?.send){
+			throw new Error(`salon ${storageChannelID} introuvable, inaccessible ou non textuel`)
+		}
+
+		return storageChannel
+	} catch(error) {
+		throw new Error(`Salon de stockage des images inaccessible. Reconfigure-le avec /config. Détail : ${error.message}`)
+	}
+}
+
+const updateCardImageURL = async (clientBot, cardID, storageChannel = null) => {
+	storageChannel = storageChannel || await getCardImageStorageChannel(clientBot)
 
 	let cardImage = await generateCardImage(clientBot, cardID)
 	console.log("Image pour la carte " + cardID.toString() + " générée " + Date.now().toString())
@@ -445,5 +462,6 @@ module.exports = {
 	getCardReply,
 	generateCardImage,
 	generateCardPreviewImage,
+	getCardImageStorageChannel,
 	updateCardImageURL
 };

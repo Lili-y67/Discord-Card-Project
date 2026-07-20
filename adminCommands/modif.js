@@ -54,8 +54,13 @@ module.exports = {
         }
 
 
-        await apiDB.editACard(cardID, {rarityValue:newRarityValue, rarity:newRarity, playerID:newPlayerID})
-        await cardFunctions.updateCardImageURL(interaction.client, cardID)
-        await interaction.editReply({embeds:[await cardFunctions.getCardEmbed(interaction.client, cardID)]})
+        try {
+            const storageChannel = await cardFunctions.getCardImageStorageChannel(interaction.client)
+            await apiDB.editACard(cardID, {rarityValue:newRarityValue, rarity:newRarity, playerID:newPlayerID})
+            await cardFunctions.updateCardImageURL(interaction.client, cardID, storageChannel)
+            await interaction.editReply({embeds:[await cardFunctions.getCardEmbed(interaction.client, cardID)]})
+        } catch(error) {
+            await interaction.editReply(error.message)
+        }
     },
 };

@@ -14,7 +14,11 @@ module.exports = {
             await interaction.editReply(`Carte introuvable`)
             return;
         }
-        await cardFunctions.updateCardImageURL(interaction.client, cardID)
-        await interaction.editReply({embeds:[await cardFunctions.getCardEmbed(interaction.client, cardID)]})
+        try {
+            await cardFunctions.updateCardImageURL(interaction.client, cardID)
+            await interaction.editReply({embeds:[await cardFunctions.getCardEmbed(interaction.client, cardID)]})
+        } catch(error) {
+            await interaction.editReply(error.message)
+        }
     },
 };

@@ -23,8 +23,9 @@ const tryQuickPick = async (client, user) => {
 
     if(await isLateEnoughQuickPick(client, userDB)){
 
+        let quickPickRes = await tryPickOperation(() => quickPick(client, discordID))
+        if(quickPickRes.error) return {picked:false, error:quickPickRes.error}
         await apiDB.updateQuickPickTime(discordID)
-        let quickPickRes = await quickPick(client, discordID)
         await transactionFunctions.giveMoney(discordID, quickPickRes.givenMoney)
         return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID), transactionFunctions.getBalanceModificationEmbed(user, quickPickRes.givenMoney)]}
 
@@ -39,7 +40,8 @@ const makeForcePick = async (client, user) => {
         return {picked:false, error:"Aucun joueur n'est configuré dans la base. Lancez node syncGuildPlayers.js pour synchroniser les membres du serveur."}
     }
 
-    let quickPickRes = await quickPick(client, user.id)
+    let quickPickRes = await tryPickOperation(() => quickPick(client, user.id))
+    if(quickPickRes.error) return {picked:false, error:quickPickRes.error}
     await transactionFunctions.giveMoney(user.id, quickPickRes.givenMoney)
     return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID), transactionFunctions.getBalanceModificationEmbed(user, quickPickRes.givenMoney)]}
 }
@@ -50,9 +52,12 @@ const makeBuyPick = async (client, user) => {
     }
     
     let discordID = user.id
-    await transactionFunctions.subMoney(discordID, constants.BUYPICKPRICE)
 
-    let cardID = (await anyPick(client, constants.MINCARDVALUEBUYPICK, constants.MAXCARDVALUEBUYPICK, discordID)).newCardID
+    const pickResult = await tryPickOperation(() => anyPick(client, constants.MINCARDVALUEBUYPICK, constants.MAXCARDVALUEBUYPICK, discordID))
+    if(pickResult.error) return {error:pickResult.error}
+
+    let cardID = pickResult.newCardID
+    await transactionFunctions.subMoney(discordID, constants.BUYPICKPRICE)
 
     return {embeds:[await cardFunctions.getCardEmbed(client, cardID), transactionFunctions.getBalanceModificationEmbed(user, -constants.BUYPICKPRICE)]}
 }
@@ -63,7 +68,8 @@ const makePickFor = async (client, discordID) => {
     }
 
     discordID = discordID.toString()
-    let quickPickRes = await quickPick(client, discordID)
+    let quickPickRes = await tryPickOperation(() => quickPick(client, discordID))
+    if(quickPickRes.error) return {picked:false, error:quickPickRes.error}
     await transactionFunctions.giveMoney(discordID, quickPickRes.givenMoney)
     return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID), transactionFunctions.getBalanceModificationEmbed(await client.users.fetch(discordID), quickPickRes.givenMoney)]}
 }
@@ -146,6 +152,7 @@ const getRarityFromRarityValue = (rarityValue) => {
 
 const anyPick = async (client, minValue, maxValue, creatorID) => {
     console.log("Creating card...")
+    const storageChannel = await cardFunctions.getCardImageStorageChannel(client)
     let cardInfos = await cardChooser(minValue, maxValue)
     let playerData = await apiDB.getPlayerDataFromID(cardInfos.playerID)
     if(!playerData){
@@ -155,8 +162,16 @@ const anyPick = async (client, minValue, maxValue, creatorID) => {
     let newCardID = await apiDB.createACard(cardInfos.playerID, cardInfos.rarity, cardInfos.rarityValue, creatorID)
     console.log("Carte " + newCardID.toString() + " créée " + Date.now().toString())
     await apiDB.changeCardOwnership(newCardID, creatorID)
-    await cardFunctions.updateCardImageURL(client, newCardID)
+    await cardFunctions.updateCardImageURL(client, newCardID, storageChannel)
     return {newCardID:newCardID, wasAlreadyPicked:wasAlreadyPicked}
+}
+
+const tryPickOperation = async (operation) => {
+    try {
+        return await operation()
+    } catch(error) {
+        return {error:error.message || "Erreur pendant le tirage de la carte."}
+    }
 }
 
 const hasPickablePlayers = async () => {
