@@ -74,11 +74,10 @@ const helpPages = (cmd) => ({
         fields: [
             { name: cmd('pick'), value: 'Tire une carte gratuite lorsque votre délai est terminé.' },
             { name: cmd('buypick'), value: 'Achète immédiatement un tirage supplémentaire.' },
-            { name: cmd('card', 'cardid:<numéro>'), value: 'Affiche le joueur, la rareté, la valeur, le propriétaire et le statut de la carte.' },
+            { name: cmd('card', 'cardid:<numéro>'), value: 'Affiche le joueur, la rareté, la valeur, le propriétaire, le statut et l’image de la carte.' },
             { name: cmd('cards'), value: 'Parcourt toutes les cartes enregistrées avec un menu pour en afficher une.' },
             { name: cmd('sell', 'cardid:<numéro>'), value: 'Vend une carte à la banque contre de l’argent.' },
-            { name: cmd('discard', 'cardid:<numéro>'), value: 'Détruit une carte pour recevoir des points de carte.' },
-            { name: cmd('cardcolor', 'cardid:<numéro> code_couleur:<hex>'), value: 'Change la couleur de l’embed, par exemple `#ff66aa`.' }
+            { name: cmd('discard', 'cardid:<numéro>'), value: 'Détruit une carte pour recevoir des points de carte.' }
         ]
     },
     collection: {
@@ -88,10 +87,9 @@ const helpPages = (cmd) => ({
             { name: cmd('inv'), value: 'Affiche votre inventaire avec un bouton pour voir chaque carte.' },
             { name: cmd('blitzers'), value: 'Affiche une ancienne liste paginée. Utilisez `user`, `page`, `filter` ou `ascendant` pour préciser la liste.' },
             { name: cmd('collection'), value: 'Affiche les joueurs et raretés déjà obtenus. L’option `user` permet de consulter un autre membre.' },
+            { name: cmd('collectioncard', 'user:<membre>'), value: 'Affiche les cartes possédées concernant un membre ciblé, avec galerie d’images.' },
             { name: cmd('guildcollection'), value: 'Prévisualise les cartes possibles des membres du serveur.' },
-            { name: cmd('collectionstats'), value: 'Affiche les statistiques globales d’une collection.' },
-            { name: cmd('research'), value: 'Recherche des cartes avec plusieurs critères : joueur, rareté, propriétaire, créateur, ordre et cartes vendues.' },
-            { name: 'Où trouver le numéro ?', value: `Le \`cardid\` est le numéro unique affiché dans ${cmd('inv')}, ${cmd('research')} et sur la carte.` }
+            { name: 'Où trouver le numéro ?', value: `Le \`cardid\` est le numéro unique affiché dans ${cmd('inv')}, ${cmd('cards')} et sur la carte.` }
         ]
     },
     economie: {
@@ -102,7 +100,7 @@ const helpPages = (cmd) => ({
             { name: cmd('profil'), value: 'Affiche votre solde, vos points de carte et votre rang. Ajoutez `user` pour voir un autre membre.' },
             { name: cmd('pay', 'user:<membre> amount:<montant>'), value: 'Transfère de l’argent à un autre membre.' },
             { name: cmd('rankup'), value: 'Passe au rang suivant si vous avez assez d’argent et de points.' },
-            { name: `${cmd('baltop')} et ${cmd('pointstop')}`, value: 'Affichent les classements d’argent et de points de carte.' }
+            { name: cmd('top', 'type:<argent|points>'), value: 'Affiche les classements d’argent ou de points de carte.' }
         ]
     },
     echanges: {
@@ -120,9 +118,9 @@ const helpPages = (cmd) => ({
         title: 'Classements',
         description: 'Comparez votre progression avec celle des autres membres.',
         fields: [
-            { name: cmd('baltop'), value: 'Classement des membres selon leur argent. L’option `page` permet de naviguer.' },
-            { name: cmd('pointstop'), value: `Classement selon les points de carte obtenus avec ${cmd('discard')}.` },
-            { name: cmd('collectionstats'), value: 'Statistiques de collection pour vous-même ou un membre choisi.' },
+            { name: cmd('top', 'type:Argent'), value: 'Classement des membres selon leur argent. L’option `page` permet de naviguer.' },
+            { name: cmd('top', 'type:Points'), value: `Classement selon les points de carte obtenus avec ${cmd('discard')}.` },
+            { name: cmd('collectioncard', 'user:<membre>'), value: 'Galerie des cartes possédées concernant le membre choisi.' },
             { name: cmd('profil', 'user:<membre>'), value: 'Résumé individuel du solde, des points et du rang.' }
         ]
     },
@@ -141,7 +139,6 @@ const helpPages = (cmd) => ({
         description: 'Commandes utiles mais réservées ou plus ponctuelles.',
         fields: [
             { name: cmd('forcepick'), value: 'Tire une carte sans attendre le cooldown. Réservée au propriétaire du bot.' },
-            { name: cmd('master'), value: 'Commande de service du bot.' },
             { name: cmd('aide'), value: 'Affiche cette aide avec le menu de catégories.' }
         ]
     }

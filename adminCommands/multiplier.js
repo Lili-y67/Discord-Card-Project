@@ -2,10 +2,13 @@ const { SlashCommandBuilder } = require('discord.js');
 
 const apiDB = require('../functions/apiDB');
 
-const OWNER_ID = '1147963951989149796';
 const SETTING_NAMES = {
     daily: 'dailyMoneyMultiplier',
     cartes: 'cardMoneyMultiplier'
+};
+const UNTIL_SETTING_NAMES = {
+    daily: 'dailyMoneyMultiplierUntil',
+    cartes: 'cardMoneyMultiplierUntil'
 };
 
 module.exports = {
@@ -29,20 +32,13 @@ module.exports = {
         .setDMPermission(false),
 
     async execute(interaction) {
-        if(interaction.user.id !== OWNER_ID){
-            await interaction.reply({
-                content: 'Cette commande est réservée au propriétaire du bot.',
-                ephemeral: true
-            });
-            return;
-        }
-
         const type = interaction.options.getString('type', true);
         const value = interaction.options.getNumber('valeur', true);
         const settingName = SETTING_NAMES[type];
 
         await apiDB.withGuild(getConfigGuildID(interaction), async () => {
             await apiDB.setPersistentSetting(settingName, value);
+            await apiDB.setPersistentSetting(UNTIL_SETTING_NAMES[type], 0);
         });
         await interaction.reply({
             content: `Le multiplicateur des gains ${type === 'daily' ? 'du /daily' : 'des cartes'} est maintenant de x${value}.`,

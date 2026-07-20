@@ -152,11 +152,7 @@ const handleInventoryButton = async (client, interaction) => {
             return true;
         }
 
-        await interaction.reply({
-            embeds: [await cardFunctions.getCardEmbed(client, parsedButton.value)],
-            flags: MessageFlags.Ephemeral,
-            allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
-        });
+        await interaction.reply(await cardFunctions.getCardReply(client, parsedButton.value, interaction.user, true));
         return true;
     }
 

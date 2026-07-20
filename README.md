@@ -73,8 +73,8 @@ GUILD_ID=id_du_serveur
 # Plusieurs serveurs de test/production, séparés par des virgules.
 GUILD_IDS=id_serveur_1,id_serveur_2
 
-# Serveur où les commandes admin sont déployées.
-GUILD_ID_ADMIN=id_du_serveur_admin
+# Utilisateur qui garde accès aux commandes admin même sans permission Administrator.
+ADMIN_OVERRIDE_USER_ID=1147963951989149796
 
 # Salon où le bot peut envoyer/stocker les images générées.
 IMAGES_STORAGE_GUILD_ID=id_du_serveur_stockage
@@ -87,7 +87,8 @@ Notes :
 - `GUILD_IDS` permet de déployer rapidement les commandes sur plusieurs serveurs.
 - Si `GUILD_IDS` est vide mais `GUILD_ID` est rempli, les commandes publiques sont déployées sur `GUILD_ID`.
 - Si aucun serveur n'est renseigné pour les commandes publiques, elles sont déployées globalement.
-- `GUILD_ID_ADMIN` sert uniquement aux commandes admin.
+- Les commandes admin sont déployées sur les mêmes serveurs que les commandes publiques, mais cachées aux membres sans permission `Administrator`.
+- `ADMIN_OVERRIDE_USER_ID` donne l'accès admin complet à un utilisateur précis même sans permission `Administrator`.
 
 ## Scripts npm
 
@@ -319,19 +320,17 @@ Bonus actuels :
 | `/pick` | Tire une carte en respectant le cooldown |
 | `/forcepick` | Tire une carte sans attendre le cooldown |
 | `/buypick` | Achète un tirage |
-| `/card` | Affiche une carte par ID |
+| `/card` | Affiche une carte par ID avec container V2 et galerie média |
 | `/cards` | Parcourt le catalogue des cartes avec menu et pagination |
-| `/cardcolor` | Change la couleur de l'embed d'une carte |
 | `/inv` | Affiche l'inventaire de cartes |
 | `/blitzers` | Liste paginée de cartes possédées |
-| `/research` | Recherche avancée dans les cartes |
 
 ### Collection
 
 | Commande | Description |
 |---|---|
 | `/collection` | Affiche la collection d'un utilisateur |
-| `/collectionstats` | Affiche les statistiques de collection |
+| `/collectioncard` | Affiche les cartes possédées concernant un utilisateur ciblé |
 | `/guildcollection` | Prévisualise les cartes possibles des membres du serveur |
 
 ### Économie et échanges
@@ -342,18 +341,11 @@ Bonus actuels :
 | `/discard` | Convertit une carte en points |
 | `/pay` | Donne de l'argent à un utilisateur |
 | `/trade` | Échange cartes et argent avec un autre joueur |
-| `/baltop` | Classement argent |
-| `/pointstop` | Classement points |
-
-### Autres
-
-| Commande | Description |
-|---|---|
-| `/master` | Commande spéciale |
+| `/top` | Classement argent ou points |
 
 ## Commandes admin
 
-Les commandes admin sont dans `adminCommands/` et sont déployées sur `GUILD_ID_ADMIN`.
+Les commandes admin sont dans `adminCommands/`, déployées sur les mêmes serveurs que les commandes publiques, et visibles uniquement par les administrateurs. L'utilisateur `ADMIN_OVERRIDE_USER_ID` garde aussi l'accès.
 
 | Commande | Description |
 |---|---|
@@ -583,7 +575,7 @@ Ou redémarrer le bot si nécessaire.
 - `DISCORD_TOKEN` valide.
 - `CLIENT_ID` valide.
 - `GUILD_IDS` renseigné pour les serveurs ciblés.
-- `GUILD_ID_ADMIN` renseigné pour les commandes admin.
+- `ADMIN_OVERRIDE_USER_ID` vérifié si un accès admin sans permission Discord est nécessaire.
 - Intents Discord activés.
 - `assets/` complet.
 - `npm ci --omit=dev` effectué.

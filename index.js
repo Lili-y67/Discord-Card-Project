@@ -1,6 +1,6 @@
 ﻿const fs = require('node:fs');
 const path = require('node:path');
-const { Client, Collection, Events, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, Collection, Events, GatewayIntentBits, Partials, PermissionFlagsBits } = require('discord.js');
 require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 
 const token = process.env.DISCORD_TOKEN;
@@ -13,11 +13,14 @@ const guildPlayerSync = require('./functions/guildPlayerSync');
 const inventoryFunctions = require('./functions/secondLayerInventoryFunctions');
 const cardsListFunctions = require('./functions/secondLayerCardsListFunctions');
 const guildCollectionFunctions = require('./functions/secondLayerGuildCollectionFunctions');
+const topFunctions = require('./functions/secondLayerTopFunctions');
+const collectionCardFunctions = require('./functions/secondLayerCollectionCardFunctions');
 const apiDB = require("./functions/apiDB");
 const mentionSafety = require("./functions/mentionSafety");
 const questCore = require("./functions/questCore");
 
 const logFilePath = "./logs.txt"
+const ADMIN_OVERRIDE_USER_ID = process.env.ADMIN_OVERRIDE_USER_ID || '1147963951989149796';
 
 const client = new Client({
 	intents: Object.values(GatewayIntentBits),
@@ -27,6 +30,7 @@ const client = new Client({
 
 
 client.commands = new Collection();
+client.adminCommandNames = new Set();
 
 client.buttonsDictionary = {}
 client.buttonGroupsDictionary = {}
@@ -93,6 +97,7 @@ for (const file of commandFiles) {
 	const command = require(filePath);
 	//console.log(command.permissions)
 	client.commands.set(command.data.name, command);
+	client.adminCommandNames.add(command.data.name);
 	//console.log(client.commands["testadmin"])
 }
 
@@ -150,6 +155,12 @@ client.on('interactionCreate', async interaction => {
 		if(await guildCollectionFunctions.handleGuildCollectionButton(client, interaction)){
 			return;
 		}
+		if(await topFunctions.handleTopButton(client, interaction)){
+			return;
+		}
+		if(await collectionCardFunctions.handleCollectionCardButton(client, interaction)){
+			return;
+		}
 		if(client.blockBot){
 			interaction.deferUpdate()
 			return;
@@ -168,6 +179,12 @@ client.on('interactionCreate', async interaction => {
 			return;
 		}
 		if(await guildCollectionFunctions.handleGuildCollectionSelect(client, interaction)){
+			return;
+		}
+	}
+
+	if(interaction.isChannelSelectMenu()){
+		if(await client.commands.get("config")?.handleConfigChannelSelect?.(client, interaction)){
 			return;
 		}
 	}
@@ -197,6 +214,14 @@ client.on('interactionCreate', async interaction => {
 
 	if (!command) return;
 
+	if(client.adminCommandNames.has(interaction.commandName) && !canUseAdminCommand(interaction)){
+		await interaction.reply(mentionSafety.withSafeMentions({
+			content: "Cette commande est réservée aux administrateurs.",
+			ephemeral: true
+		}));
+		return;
+	}
+
 	if(client.blockBot&&interaction.commandName != "blockbot"){
 		interaction.reply(mentionSafety.withSafeMentions({ content: "Le bot est actuellement en maintenance, merci de votre patience :)" }))
 		return;
@@ -204,7 +229,7 @@ client.on('interactionCreate', async interaction => {
 
 	try {
 		await command.execute(interaction);
-		if(["collection", "inv", "cards", "guildcollection"].includes(interaction.commandName)){
+		if(["collection", "collectioncard", "inv", "cards", "guildcollection"].includes(interaction.commandName)){
 			await questCore.trackEvent(interaction.user.id, "collection_viewed");
 		}
         console.log(interaction.commandName.toString() + " from " + interaction.user.username + " " + interaction.user.id.toString() + " -- ENDED at " + Date.now().toString() + " -- it took " + (Date.now()-startingDate).toString() + "ms")
@@ -232,3 +257,8 @@ client.on('interactionCreate', async interaction => {
 
 
 client.login(token);
+
+const canUseAdminCommand = (interaction) => {
+	if(interaction.user.id == ADMIN_OVERRIDE_USER_ID) return true;
+	return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) || false;
+}

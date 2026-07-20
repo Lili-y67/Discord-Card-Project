@@ -1,4 +1,13 @@
-const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
+const {
+	AttachmentBuilder,
+	ContainerBuilder,
+	EmbedBuilder,
+	MediaGalleryBuilder,
+	MediaGalleryItemBuilder,
+	MessageFlags,
+	SeparatorBuilder,
+	ThumbnailBuilder
+} = require('discord.js');
 const Canvas = require('canvas');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -6,6 +15,10 @@ const path = require('node:path');
 const apiDB = require("./apiDB");
 const constants = require("../data/constants.js");
 const cardDisplay = require("./cardDisplay");
+const mentionSafety = require("./mentionSafety");
+
+const IMAGES_STORAGE_GUILD_SETTING = "imagesStorageGuildID";
+const IMAGES_STORAGE_CHANNEL_SETTING = "imagesStorageChannelID";
 
 const CARD_FONT_FAMILY = 'Arial';
 
@@ -69,6 +82,89 @@ const getCardEmbed = async (clientBot, cardID) => {
     .setFooter({ text: `Carte créée le ${new Date(card.creationStamp).toLocaleDateString("fr-FR")}`});
 
     return cardEmbed
+}
+
+const getCardReply = async (clientBot, cardID, requestedByUser = null, ephemeral = false) => {
+    const card = await apiDB.getACardFromID(cardID)
+	if(!card){
+		throw new Error(`Carte ${cardID} introuvable.`)
+	}
+
+	return mentionSafety.withSafeMentions({
+		components: [await getCardContainer(clientBot, card, requestedByUser)],
+		flags: ephemeral ? MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral : MessageFlags.IsComponentsV2
+	})
+}
+
+const getCardContainer = async (clientBot, card, requestedByUser = null) => {
+	const creatorDisplay = await getUserDisplay(clientBot, card.creatorID)
+	const ownerDisplay = await getUserDisplay(clientBot, card.ownerID)
+	const playerDisplay = getPlayerDisplay(card)
+	const creationDate = new Date(card.creationStamp).toLocaleDateString("fr-FR")
+	const thumbnailURL = requestedByUser?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true })
+
+	const container = new ContainerBuilder()
+		.setAccentColor(parseColor(card.embedColor))
+		.addSectionComponents(section => {
+			section.addTextDisplayComponents(text =>
+				text.setContent(`## Carte numero ${card.cardID}\nDemandee par ${getRequestedByDisplay(requestedByUser)}`)
+			)
+			if(thumbnailURL){
+				section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailURL))
+			}
+			return section
+		})
+		.addSeparatorComponents(new SeparatorBuilder())
+		.addTextDisplayComponents(text =>
+			text.setContent([
+				`**Joueur** ${playerDisplay} (joueur ${card.playerID ?? "?"})`,
+				`**Rarete** ${mentionSafety.escapeMarkdown(card.rarity)} (${card.rarityValue})`,
+				`**Createur** ${creatorDisplay}`,
+				`**Possesseur** ${ownerDisplay}`,
+				`**Statut** ${card.locked ? "Verrouillee" : "Deverrouillee"}`,
+				`-# Carte creee le ${creationDate}`
+			].join("\n"))
+		)
+
+	if(card.imageURL){
+		container.addMediaGalleryComponents(
+			new MediaGalleryBuilder().addItems(
+				new MediaGalleryItemBuilder()
+					.setURL(card.imageURL)
+					.setDescription(`Carte ${card.cardID}`)
+			)
+		)
+	}
+
+	return container
+}
+
+const getUserDisplay = async (clientBot, userID) => {
+	if(!userID) return "Aucun"
+	const mention = mentionSafety.getUserMention(userID)
+	if(mention) return mention
+
+	try {
+		const user = await clientBot.users.fetch(userID)
+		return mentionSafety.getDisplayName(user.username, userID)
+	} catch(error) {
+		return mentionSafety.getDisplayName(userID, "Aucun")
+	}
+}
+
+const getRequestedByDisplay = (user) => {
+	return mentionSafety.getUserMention(user?.id) || mentionSafety.getDisplayName(user?.username, "Utilisateur")
+}
+
+const getPlayerDisplay = (card) => {
+	const mention = getPlayerMention(card)
+	return mention || mentionSafety.escapeMarkdown(getCardPlayerName(card))
+}
+
+const parseColor = (color) => {
+	const normalizedColor = color?.toString().replace("#", "")
+	const parsedColor = Number.parseInt(normalizedColor, 16)
+	return Number.isFinite(parsedColor) ? parsedColor : 0xD72306
 }
 
 const generateCardImage = async (clientBot, cardID) => {
@@ -319,12 +415,15 @@ const roundedRect = (ctx, x, y, width, height, radius) => {
 }
 
 const updateCardImageURL = async (clientBot, cardID) => {
-	if(!clientBot.imagesStorageGuildID || !clientBot.imagesStorageChannelID){
-		throw new Error("IMAGES_STORAGE_GUILD_ID et IMAGES_STORAGE_CHANNEL_ID doivent être renseignés dans .env")
+	const storageGuildID = await apiDB.getPersistentSetting(IMAGES_STORAGE_GUILD_SETTING, clientBot.imagesStorageGuildID || "")
+	const storageChannelID = await apiDB.getPersistentSetting(IMAGES_STORAGE_CHANNEL_SETTING, clientBot.imagesStorageChannelID || "")
+
+	if(!storageGuildID || !storageChannelID){
+		throw new Error("Configure un salon de stockage avec /config ou renseigne IMAGES_STORAGE_GUILD_ID et IMAGES_STORAGE_CHANNEL_ID dans .env")
 	}
 
-	let storageGuild = await clientBot.guilds.fetch(clientBot.imagesStorageGuildID)
-	let storageChannel = await storageGuild.channels.fetch(clientBot.imagesStorageChannelID)
+	let storageGuild = await clientBot.guilds.fetch(storageGuildID)
+	let storageChannel = await storageGuild.channels.fetch(storageChannelID)
 
 	let cardImage = await generateCardImage(clientBot, cardID)
 	console.log("Image pour la carte " + cardID.toString() + " générée " + Date.now().toString())
@@ -343,6 +442,7 @@ module.exports = {
 	MEMBER_IMAGE_HEIGHT,
 	DISCORD_AVATAR_SIZE,
     getCardEmbed,
+	getCardReply,
 	generateCardImage,
 	generateCardPreviewImage,
 	updateCardImageURL

@@ -10,6 +10,8 @@ const questCore = require("./questCore")
 const CARD_MONEY_MULTIPLIER_SETTING = "cardMoneyMultiplier"
 const DAILY_MONEY_MULTIPLIER_SETTING = "dailyMoneyMultiplier"
 const PICK_BASE_TIMER_SETTING = "pickBaseTimerMs"
+const CARD_MONEY_MULTIPLIER_UNTIL_SETTING = "cardMoneyMultiplierUntil"
+const DAILY_MONEY_MULTIPLIER_UNTIL_SETTING = "dailyMoneyMultiplierUntil"
 
 const tryQuickPick = async (client, user) => {
 
@@ -83,7 +85,7 @@ const quickPick = async (client, discordID) => {
         givenMoney = anyPickRes.wasAlreadyPicked ? constants.BASEMONEYLOOTTABLE[card.rarity]/2 : constants.BASEMONEYLOOTTABLE[card.rarity]
     }
 
-    const cardMoneyMultiplier = await apiDB.getPersistentSetting(CARD_MONEY_MULTIPLIER_SETTING, 1)
+    const cardMoneyMultiplier = await getActiveMoneyMultiplier(CARD_MONEY_MULTIPLIER_SETTING, CARD_MONEY_MULTIPLIER_UNTIL_SETTING)
     givenMoney = Math.floor(givenMoney * getRankCardMoneyMultiplier(userDB?.rankID) * cardMoneyMultiplier)
 
     return {pickedCardID:anyPickRes.newCardID, givenMoney:givenMoney}
@@ -175,24 +177,27 @@ const tryDaily = async (user) => {
     }
     else{
         return {picked:false}
-        //return {picked:false, timeLeft:msToTime(parseInt(userDB.lastDailyPick)+constants.TIMEBETWEENSLOWPICK-Date.now())}
     }
 }
 
 const isLateEnoughDaily = async (userDB) => { //required time en ms
-
     return !(new Date().setHours(0,0,0,0) == new Date(parseInt(userDB.lastDailyPick)).setHours(0,0,0,0))
-
-    return parseInt(userDB.lastDailyPick) + constants.TIMEBETWEENSLOWPICK < Date.now() ? true : false
 }
 
 const daily = async (discordID) => {
     let givenMoney = dailyGivenValue(Math.random()*constants.DAILYRANDOMMULTIPLICATOR)
     let userDB = await apiDB.getAUserFromDiscordID(discordID)
-    const dailyMoneyMultiplier = await apiDB.getPersistentSetting(DAILY_MONEY_MULTIPLIER_SETTING, 1)
+    const dailyMoneyMultiplier = await getActiveMoneyMultiplier(DAILY_MONEY_MULTIPLIER_SETTING, DAILY_MONEY_MULTIPLIER_UNTIL_SETTING)
     givenMoney = Math.floor(givenMoney * getRankDailyMoneyMultiplier(userDB?.rankID) * dailyMoneyMultiplier)
     await transactionFunctions.giveMoney(discordID, givenMoney)
     return givenMoney
+}
+
+const getActiveMoneyMultiplier = async (multiplierSetting, untilSetting) => {
+    const multiplier = Number(await apiDB.getPersistentSetting(multiplierSetting, 1)) || 1
+    const until = Number(await apiDB.getPersistentSetting(untilSetting, 0)) || 0
+    if(until > 0 && until <= Date.now()) return 1
+    return multiplier
 }
 
 const getRankCardMoneyMultiplier = (rankID) => {

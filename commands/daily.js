@@ -20,7 +20,6 @@ module.exports = {
 		}
 		else{
 			await interaction.editReply(`Vous avez déjà effectué votre /daily aujourd'hui!`)
-			//await interaction.editReply(`Il vous reste ${tryDaily.timeLeft.toString()} avant de pouvoir à nouveau effectuer un /daily`)
 		}
 	},
 };

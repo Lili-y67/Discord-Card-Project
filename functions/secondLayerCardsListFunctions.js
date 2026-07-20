@@ -137,11 +137,7 @@ const handleCardsSelect = async (client, interaction) => {
 
     const user = await client.users.fetch(parsedInteraction.userID);
     await interaction.update(await getCardsReply(client, user, parsedInteraction.sort, parsedInteraction.page, parsedInteraction.expiresAt));
-    await interaction.followUp({
-        embeds: [await cardFunctions.getCardEmbed(client, selectedCardID)],
-        flags: MessageFlags.Ephemeral,
-        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
-    });
+    await interaction.followUp(await cardFunctions.getCardReply(client, selectedCardID, interaction.user, true));
     return true;
 }
 

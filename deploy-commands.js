@@ -1,6 +1,11 @@
-﻿const fs = require('node:fs');
+const fs = require('node:fs');
 const path = require('node:path');
-const { REST, Routes } = require('discord.js');
+const {
+	ApplicationCommandPermissionType,
+	PermissionFlagsBits,
+	REST,
+	Routes
+} = require('discord.js');
 require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 
 const clientId = process.env.CLIENT_ID;
@@ -9,18 +14,29 @@ const guildIds = (process.env.GUILD_IDS || guildId || "")
 	.split(",")
 	.map(id => id.trim())
 	.filter(Boolean);
-const guildIdAdmin = process.env.GUILD_ID_ADMIN;
 const token = process.env.DISCORD_TOKEN;
+const ownerId = process.env.ADMIN_OVERRIDE_USER_ID || '1147963951989149796';
 
-const commands = [];
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+const loadCommands = (directoryName, transform = commandJSON => commandJSON) => {
+	const commands = [];
+	const commandsPath = path.join(__dirname, directoryName);
+	const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-for (const file of commandFiles) {
-	const filePath = path.join(commandsPath, file);
-	const command = require(filePath);
-	commands.push(command.data.toJSON());
+	for (const file of commandFiles) {
+		const filePath = path.join(commandsPath, file);
+		const command = require(filePath);
+		commands.push(transform(command.data.toJSON(), command));
+	}
+
+	return commands;
 }
+
+const publicCommands = loadCommands('commands');
+const adminCommands = loadCommands('adminCommands', commandJSON => ({
+	...commandJSON,
+	default_member_permissions: PermissionFlagsBits.Administrator.toString()
+}));
+const adminCommandNames = new Set(adminCommands.map(command => command.name));
 
 const assertUniqueCommandNames = (commandList, sourceName) => {
 	const seenCommands = new Map();
@@ -32,8 +48,9 @@ const assertUniqueCommandNames = (commandList, sourceName) => {
 	}
 }
 
-assertUniqueCommandNames(commands, 'commands');
-
+assertUniqueCommandNames(publicCommands, 'commands');
+assertUniqueCommandNames(adminCommands, 'adminCommands');
+assertUniqueCommandNames([...publicCommands, ...adminCommands], 'commands + adminCommands');
 
 const rest = new REST({ version: '10' }).setToken(token);
 
@@ -43,67 +60,45 @@ const rest = new REST({ version: '10' }).setToken(token);
 
 		if(guildIds.length){
 			for(const currentGuildID of guildIds){
-				await rest.put(
+				const deployedCommands = await rest.put(
 					Routes.applicationGuildCommands(clientId, currentGuildID),
-					{ body: commands },
+					{ body: [...publicCommands, ...adminCommands] },
 				);
 				console.log(`Successfully reloaded guild (/) commands for ${currentGuildID}.`);
+				await applyAdminOwnerOverride(currentGuildID, deployedCommands);
 			}
 		}
 		else{
 			await rest.put(
 				Routes.applicationCommands(clientId),
-				{ body: commands },
+				{ body: publicCommands },
 			);
-			console.log('Successfully reloaded global (/) commands.');
+			console.log('Successfully reloaded global public (/) commands. Admin commands require GUILD_ID or GUILD_IDS.');
 		}
 	} catch (error) {
 		console.error(error);
 	}
 })();
 
-
-const commandsAdmin = [];
-const commandsPathAdmin = path.join(__dirname, 'adminCommands');
-const commandFilesAdmin = fs.readdirSync(commandsPathAdmin).filter(file => file.endsWith('.js'));
-
-for (const file of commandFilesAdmin) {
-	const filePath = path.join(commandsPathAdmin, file);
-	const command = require(filePath);
-	commandsAdmin.push(command.data.toJSON());
+async function applyAdminOwnerOverride(currentGuildID, deployedCommands) {
+	for(const command of deployedCommands.filter(command => adminCommandNames.has(command.name))){
+		try {
+			await rest.put(
+				Routes.applicationCommandPermissions(clientId, currentGuildID, command.id),
+				{
+					body: {
+						permissions: [
+							{
+								id: ownerId,
+								type: ApplicationCommandPermissionType.User,
+								permission: true
+							}
+						]
+					}
+				}
+			);
+		} catch(error) {
+			console.warn(`Impossible d'appliquer l'override admin pour /${command.name}: ${error.message}`);
+		}
+	}
 }
-
-assertUniqueCommandNames(commandsAdmin, 'adminCommands');
-
-const restAdmin = new REST({ version: '10' }).setToken(token);
-
-(async () => {
-	try {
-		console.log('Started refreshing application (/) admin commands.');
-
-		if(guildIdAdmin){
-			await restAdmin.put(
-				Routes.applicationGuildCommands(clientId, guildIdAdmin),
-				{ body: commandsAdmin },
-			);
-		}
-
-		console.log('Successfully reloaded application (/) admin commands.');
-	} catch (error) {
-		console.error(error);
-	}
-})();
-
-
-
-
-
-
-
-
-
-/*
-rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands })
-	.then(() => console.log('Successfully registered application commands.'))
-	.catch(console.error);
-*/

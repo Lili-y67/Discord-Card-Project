@@ -23,9 +23,7 @@ module.exports = {
 
 		if(await apiDB.isCardRegistered(cardID)){
 
-			let cardEmbed = await cardFunctions.getCardEmbed(interaction.client, cardID)
-
-			await interaction.editReply({ embeds: [cardEmbed] })
+			await interaction.editReply(await cardFunctions.getCardReply(interaction.client, cardID, interaction.user))
 		}
 		else{
 			await interaction.editReply(`La carte numéro ${cardID} n'existe pas`)

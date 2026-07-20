@@ -2,7 +2,7 @@
 
 const apiDB = require("../functions/apiDB")
 
-const transactionFunctions = require("../functions/secondLayerTransactionFunctions")
+const profileFunctions = require("../functions/secondLayerProfileFunctions")
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -14,6 +14,6 @@ module.exports = {
         const userRequested = interaction.options.getUser("user", false) == null ? interaction.user : interaction.options.getUser("user", false)
         await apiDB.prepareUser(userRequested.id.toString(), userRequested.username)
         await apiDB.updateUserName(userRequested.id, userRequested.username)
-        await interaction.reply({ embeds: [await transactionFunctions.getWalletEmbed(userRequested)]})
+        await interaction.reply(await profileFunctions.getProfileReply(userRequested, interaction.user))
     },
 };

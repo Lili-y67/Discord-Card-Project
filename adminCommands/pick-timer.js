@@ -1,11 +1,9 @@
-const { MessageFlags, SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 
 const apiDB = require("../functions/apiDB");
 const constants = require("../data/constants.js");
-const mentionSafety = require("../functions/mentionSafety");
 
 const PICK_BASE_TIMER_SETTING = "pickBaseTimerMs";
-const OWNER_ID = '1147963951989149796';
 
 const TIMER_CHOICES = [
     { name: "15 minutes", value: 15 * 60 * 1000 },
@@ -31,15 +29,6 @@ module.exports = {
             .addChoices(...TIMER_CHOICES))
         .setDMPermission(false),
     async execute(interaction) {
-        if(interaction.user.id !== OWNER_ID){
-            await interaction.reply({
-                content: 'Cette commande est réservée au propriétaire du bot.',
-                flags: MessageFlags.Ephemeral,
-                allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
-            });
-            return;
-        }
-
         await interaction.deferReply();
         const selectedTimer = interaction.options.getInteger("timer");
         await apiDB.withGuild(getConfigGuildID(interaction), async () => {

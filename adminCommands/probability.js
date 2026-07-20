@@ -2,9 +2,6 @@ const { MessageFlags, SlashCommandBuilder } = require('discord.js');
 
 const apiDB = require("../functions/apiDB");
 const constants = require("../data/constants.js");
-const mentionSafety = require("../functions/mentionSafety");
-
-const OWNER_ID = '1147963951989149796';
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -24,15 +21,6 @@ module.exports = {
         .setDMPermission(false),
 
     async execute(interaction) {
-        if(interaction.user.id !== OWNER_ID){
-            await interaction.reply({
-                content: 'Cette commande est réservée au propriétaire du bot.',
-                flags: MessageFlags.Ephemeral,
-                allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
-            });
-            return;
-        }
-
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const rarityName = interaction.options.getString("rarete", true);
         const probability = interaction.options.getNumber("pourcentage", true);
