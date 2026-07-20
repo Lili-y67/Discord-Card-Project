@@ -1,613 +1,202 @@
 # NewGenCard
 
-Bot Discord de collection de cartes, construit avec `discord.js` v14, `sqlite3` et `canvas`.
+NewGenCard est un bot Discord de collection de cartes. Les membres d'un serveur deviennent des cartes à tirer, vendre, échanger, afficher et collectionner.
 
-Le bot permet aux membres d'un serveur de tirer des cartes représentant les membres du serveur, de les vendre, les échanger, les afficher, compléter une collection par rareté, gagner de l'argent, monter en rang et consulter les classements.
+Le projet tourne avec `discord.js` v14, `sqlite3` et `canvas`. Chaque serveur Discord possède sa propre base SQLite, ce qui garde les inventaires, monnaies, rangs et collections séparés.
 
-Il ajoute aussi une boucle de progression avec quêtes quotidiennes, XP, niveaux de quête, tickets et roue fortune.
+## Ce que fait le bot
 
-## Fonctionnement général
-
-NewGenCard repose sur trois idées principales :
-
-- Chaque serveur Discord possède sa propre base SQLite.
-- Les cartes sont générées à partir des membres synchronisés du serveur.
-- Les raretés, prix, points et couleurs sont centralisés dans `data/constants.js`.
-
-Le bot utilise les composants Discord récents, notamment les containers Components V2 pour certaines interfaces comme `/inv`, `/cards`, `/collection` et `/guildcollection`.
-
-## Structure du projet
-
-```txt
-NewGenCard/
-├─ adminCommands/              Commandes administrateur
-├─ assets/                     Cadres des cartes par rareté
-├─ commands/                   Commandes slash publiques
-├─ data/
-│  ├─ constants.js             Raretés, prix, rangs, cooldowns, couleurs
-│  └─ guilds/                  Bases SQLite par serveur
-├─ functions/                  Logique métier du bot
-├─ deploy-commands.js          Déploiement des slash commands
-├─ deploy.js                   Wrapper court pour Pterodactyl
-├─ vps-start.js                Mise à jour Git + déploiement + démarrage VPS
-├─ index.js                    Entrée principale du bot
-├─ newDBinit.js                Initialisation/migration DB
-├─ syncGuildPlayers.js         Synchronisation des membres
-└─ package.json
-```
+- Tirage de cartes avec raretés, cooldowns et images générées.
+- Inventaire, catalogue, collection personnelle et collection serveur.
+- Économie interne avec vente, points de carte, paiements et échanges.
+- Progression par rangs, bonus de gains et récompense quotidienne.
+- Quêtes quotidiennes, XP de quête, tickets et roue de la fortune.
+- Commandes admin pour gérer l'économie, les probabilités, la maintenance et les cartes.
 
 ## Prérequis
 
-Node.js 20 ou plus récent est recommandé.
+- Node.js 20 ou plus récent.
+- Un bot Discord avec token et application ID.
+- Les intents nécessaires activés dans le Discord Developer Portal, notamment `SERVER MEMBERS INTENT`.
+- Les dépendances natives de `canvas` si le bot tourne sur Linux.
 
-Le projet dépend de `canvas`, donc sur Linux il faut installer les bibliothèques natives nécessaires.
-
-Ubuntu/Debian :
+Sur Ubuntu/Debian :
 
 ```bash
 sudo apt update
 sudo apt install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 ```
 
-Installation Node :
+## Installation
 
 ```bash
 npm ci
+cp .env.example .env
 ```
 
-Sur un serveur de production ou un panel Pterodactyl, `npm ci --omit=dev` suffit si les dépendances de dev ne sont pas utilisées.
-
-## Variables d'environnement
-
-Créer un fichier `.env` à la racine du projet.
-
-Exemple :
+Remplir ensuite le fichier `.env` :
 
 ```env
-DISCORD_TOKEN=token_du_bot
-CLIENT_ID=id_application_discord
+DISCORD_TOKEN=your_discord_bot_token
+CLIENT_ID=your_discord_application_id
 
-# Serveur principal historique, utilisé si GUILD_IDS n'est pas renseigné.
-GUILD_ID=id_du_serveur
+# Optionnel: serveur principal si GUILD_IDS n'est pas utilisé.
+GUILD_ID=your_main_guild_id
 
-# Plusieurs serveurs de test/production, séparés par des virgules.
-GUILD_IDS=id_serveur_1,id_serveur_2
+# Optionnel: plusieurs serveurs, séparés par des virgules.
+GUILD_IDS=your_first_guild_id,your_second_guild_id
 
-# Utilisateur qui garde accès aux commandes admin même sans permission Administrator.
+# Optionnel: utilisateur qui garde l'accès admin même sans permission Administrator.
 ADMIN_OVERRIDE_USER_ID=1147963951989149796
 
-# Salon où le bot peut envoyer/stocker les images générées.
-IMAGES_STORAGE_GUILD_ID=id_du_serveur_stockage
-IMAGES_STORAGE_CHANNEL_ID=id_du_salon_stockage
+# Optionnel: salon utilisé pour stocker les images de cartes générées.
+IMAGES_STORAGE_GUILD_ID=your_images_storage_guild_id
+IMAGES_STORAGE_CHANNEL_ID=your_images_storage_channel_id
 ```
 
-Notes :
+Variables obligatoires :
 
-- `DISCORD_TOKEN` et `CLIENT_ID` sont obligatoires.
-- `GUILD_IDS` permet de déployer rapidement les commandes sur plusieurs serveurs.
-- Si `GUILD_IDS` est vide mais `GUILD_ID` est rempli, les commandes publiques sont déployées sur `GUILD_ID`.
-- Si aucun serveur n'est renseigné pour les commandes publiques, elles sont déployées globalement.
-- Les commandes admin sont déployées sur les mêmes serveurs que les commandes publiques, mais cachées aux membres sans permission `Administrator`.
-- `ADMIN_OVERRIDE_USER_ID` donne l'accès admin complet à un utilisateur précis même sans permission `Administrator`.
+- `DISCORD_TOKEN`
+- `CLIENT_ID`
 
-## Scripts npm
+Pour un déploiement de commandes sur serveur, renseigner `GUILD_IDS` ou `GUILD_ID`. Sans serveur cible, seules les commandes publiques sont déployées globalement.
 
-```bash
-npm start
-```
+## Lancement
 
-Démarre le bot avec `node index.js`.
+Initialiser la base, déployer les commandes, puis démarrer le bot :
 
 ```bash
-npm run start:vps
-```
-
-Sur un VPS, fait une mise à jour Git propre, installe les dépendances, déploie les commandes, prépare la base puis démarre le bot.
-
-```bash
-npm run deploy
-```
-
-Déploie les commandes slash publiques et admin.
-
-```bash
-npm run init-db
-```
-
-Initialise ou met à jour la structure des bases SQLite.
-
-```bash
-npm run sync-members
-```
-
-Synchronise les membres des serveurs accessibles par le bot.
-
-```bash
-/quetes
-/roue
-```
-
-`/quetes` affiche les quêtes du jour et `/roue` consomme un ticket gagné via les quêtes.
-
-```bash
-npm run check
-```
-
-Vérifie rapidement la syntaxe de `index.js`.
-
-## Installation propre
-
-Pour une installation propre sur un serveur :
-
-```bash
-npm ci --omit=dev
 npm run init-db
 npm run deploy
 npm start
 ```
 
-Si vous repartez d'une installation existante, sauvegardez avant de supprimer quoi que ce soit :
+Commandes npm utiles :
 
-```txt
-data/
-.env
-assets/
-```
-
-Les bases serveur sont dans `data/guilds/`. Les supprimer remet les collections, cartes, monnaies et rangs à zéro pour les serveurs concernés.
-
-## VPS / Pterodactyl
-
-Startup recommandé si le dossier du VPS est connecté à Git :
-
-```bash
-node vps-start.js
-```
-
-Ce lanceur fait automatiquement :
-
-- `git fetch --all --prune`
-- `git pull --ff-only`
-- `npm install --omit=dev` ou `npm ci --omit=dev` si un `package-lock.json` existe
-- `node deploy-commands.js`
-- `node newDBinit.js`
-- `node index.js`
-
-Le `git pull --ff-only` évite les corrections dangereuses : si le VPS contient des modifications locales ou un historique différent, le script s'arrête au lieu d'écraser les fichiers ou les bases.
-
-Options utiles dans l'environnement du VPS :
-
-```env
-VPS_GIT_PULL=false
-VPS_NPM_INSTALL=false
-VPS_DEPLOY_COMMANDS=false
-VPS_INIT_DB=false
-VPS_PREPARE_ONLY=true
-```
-
-Chaque option désactive l'étape correspondante, sauf `VPS_PREPARE_ONLY=true` qui prépare le projet sans lancer le bot.
-
-Si vous ne voulez pas d'auto-update Git au démarrage, gardez l'ancien startup :
-
-```bash
-node index.js
-```
-
-Pour déployer les commandes depuis Pterodactyl, le fichier `deploy.js` existe uniquement comme wrapper court :
-
-```bash
-node deploy.js
-```
-
-Il appelle `deploy-commands.js`. C'est pratique si le panel limite la longueur du nom de startup ou de commande.
-
-## Multi-serveur
-
-Chaque serveur a sa propre base SQLite :
-
-```txt
-data/guilds/<ID_DU_SERVEUR>.db
-```
-
-Conséquences :
-
-- Les cartes d'un serveur ne sont pas mélangées avec celles d'un autre serveur.
-- Un membre synchronisé sur le serveur A ne devient pas automatiquement une carte sur le serveur B.
-- Les monnaies, inventaires, rangs et collections sont séparés par serveur.
-- Le contexte serveur est choisi automatiquement via `interaction.guildId`.
-
-Le bot synchronise les membres au démarrage et lorsqu'un membre rejoint le serveur.
-
-Important : les bots ne sont pas comptés comme cartes de membres.
-
-## Assets des cartes
-
-Les cadres sont dans `assets/`.
-
-Noms actuellement attendus :
-
-```txt
-Artefact.png
-Commun.png
-Crystal.png
-Dore.png
-Epique.png
-Error Code.png
-Legendaire.png
-Mythique.png
-Peu Commun.png
-Rare.png
-Speciale.png
-Tres Rare.png
-```
-
-Les noms doivent correspondre aux raretés définies dans `data/constants.js`.
-
-## Raretés
-
-Les raretés sont configurées dans `data/constants.js`.
-
-| Rareté | Prix de vente | Points de discard | Note |
-|---|---:|---:|---|
-| Commun | 5$ | 1 | Très fréquent |
-| Peu Commun | 10$ | 2 | Fréquent |
-| Rare | 20$ | 4 | Correct |
-| Tres Rare | 25$ | 5 | Plus rare |
-| Epique | 35$ | 7 | Rare |
-| Legendaire | 100$ | 20 | Très rare |
-| Dore | 150$ | 30 | Très rare |
-| Mythique | 250$ | 50 | Ultra rare |
-| Artefact | 500$ | 100 | Très haut rang |
-| Speciale | 1000$ | 200 | Cadre spécial multicolore |
-| Error Code | 1000$ à 5000$ | 250 à 1000 | Gain aléatoire |
-| Crystal | 5000$ | 1000 | 0.001% |
-
-Le tirage est basé sur les plages `minValue` / `maxValue` et `weight`.
-
-## Rangs
-
-Les rangs sont configurés dans `data/constants.js`.
-
-Ils jouent sur :
-
-- le coût du prochain rankup ;
-- les points nécessaires ;
-- le cooldown de `/pick` ;
-- le multiplicateur des gains de carte ;
-- le multiplicateur du `/daily`.
-
-Rangs actuels :
-
-```txt
-1. Iron
-2. Bronze
-3. Silver
-4. Gold
-5. Platinium
-6. Diamond
-7. Master
-8. Grand Master
-```
-
-Bonus actuels :
-
-| Rang | Bonus cartes | Bonus daily |
-|---:|---:|---:|
-| 1 | x1 | x1 |
-| 2 | x1.05 | x1.08 |
-| 3 | x1.10 | x1.16 |
-| 4 | x1.18 | x1.28 |
-| 5 | x1.28 | x1.42 |
-| 6 | x1.40 | x1.58 |
-| 7 | x1.55 | x1.78 |
-| 8 | x1.75 | x2 |
+| Script | Rôle |
+|---|---|
+| `npm start` | Lance `index.js`. |
+| `npm run deploy` | Déploie les slash commands publiques et admin. |
+| `npm run init-db` | Initialise ou met à jour les bases SQLite. |
+| `npm run sync-members` | Synchronise les membres Discord dans les bases serveur. |
+| `npm run check` | Vérifie rapidement la syntaxe de `index.js`. |
+| `npm run start:vps` | Lance `vps-start.js` si ce fichier est présent sur l'installation. |
 
 ## Commandes publiques
 
-### Aide et profil
-
-| Commande | Description |
+| Commande | Rôle |
 |---|---|
-| `/aide` | Explique les commandes et le fonctionnement du bot |
-| `/profil` | Affiche le profil d'un utilisateur |
-| `/daily` | Donne la récompense journalière |
-| `/rankup` | Permet de passer au rang suivant |
-
-### Tirage et cartes
-
-| Commande | Description |
-|---|---|
-| `/pick` | Tire une carte en respectant le cooldown |
-| `/forcepick` | Tire une carte sans attendre le cooldown |
-| `/buypick` | Achète un tirage |
-| `/card` | Affiche une carte par ID avec container V2 et galerie média |
-| `/cards` | Parcourt le catalogue des cartes avec menu et pagination |
-| `/inv` | Affiche l'inventaire de cartes |
-| `/blitzers` | Liste paginée de cartes possédées |
-
-### Collection
-
-| Commande | Description |
-|---|---|
-| `/collection` | Affiche la collection d'un utilisateur |
-| `/collectioncard` | Affiche les cartes possédées concernant un utilisateur ciblé |
-| `/guildcollection` | Prévisualise les cartes possibles des membres du serveur |
-
-### Économie et échanges
-
-| Commande | Description |
-|---|---|
-| `/sell` | Vend une carte à la banque |
-| `/discard` | Convertit une carte en points |
-| `/pay` | Donne de l'argent à un utilisateur |
-| `/trade` | Échange cartes et argent avec un autre joueur |
-| `/top` | Classement argent ou points |
+| `/aide` | Affiche l'aide du bot. |
+| `/profil` | Affiche le profil d'un joueur. |
+| `/daily` | Récupère la récompense quotidienne. |
+| `/pick` | Tire une carte avec cooldown. |
+| `/forcepick` | Tire une carte sans cooldown. |
+| `/buypick` | Achète un tirage. |
+| `/card` | Affiche une carte précise. |
+| `/cards` | Parcourt le catalogue des cartes. |
+| `/inv` | Affiche l'inventaire. |
+| `/blitzers` | Liste les cartes possédées. |
+| `/collection` | Affiche la collection d'un joueur. |
+| `/collectioncard` | Affiche les cartes possédées pour un membre cible. |
+| `/guildcollection` | Prévisualise les cartes possibles du serveur. |
+| `/sell` | Vend une carte. |
+| `/discard` | Convertit une carte en points. |
+| `/pay` | Envoie de l'argent à un joueur. |
+| `/trade` | Propose un échange. |
+| `/top` | Affiche les classements. |
+| `/rankup` | Passe au rang suivant. |
+| `/quetes` | Affiche ou réclame les quêtes quotidiennes. |
+| `/roue` | Utilise un ticket de roue. |
 
 ## Commandes admin
 
-Les commandes admin sont dans `adminCommands/`, déployées sur les mêmes serveurs que les commandes publiques, et visibles uniquement par les administrateurs. L'utilisateur `ADMIN_OVERRIDE_USER_ID` garde aussi l'accès.
+Les commandes admin sont dans `adminCommands/`. Elles sont déployées avec la permission Discord `Administrator`, avec un accès supplémentaire pour `ADMIN_OVERRIDE_USER_ID`.
 
-| Commande | Description |
+| Commande | Rôle |
 |---|---|
-| `/blockbot` | Active/désactive le mode maintenance |
-| `/config` | Ouvre le panneau de configuration admin |
-| `/forcelock` | Verrouille une carte |
-| `/forceunlock` | Déverrouille une carte |
-| `/givecardpoints` | Ajoute des points à un joueur |
-| `/subcardpoints` | Retire des points à un joueur |
-| `/givemoney` | Ajoute de l'argent à un joueur |
-| `/submoney` | Retire de l'argent à un joueur |
-| `/modif` | Modifie une carte existante |
-| `/pickfor` | Tire une carte pour un utilisateur |
-| `/multiplier` | Modifie le multiplicateur des gains |
-| `/pick-timer` | Change le timer de base du `/pick` |
-| `/probability` | Change la probabilité d'une rareté |
-| `/setlastpickableplayerid` | Change l'ID du dernier joueur tirable |
-| `/setqptimemultiplicator` | Change le multiplicateur de cooldown pick |
-| `/updatecardimage` | Régénère l'image d'une carte |
+| `/blockbot` | Active ou désactive la maintenance. |
+| `/config` | Ouvre le panneau de configuration. |
+| `/forcelock` / `/forceunlock` | Verrouille ou déverrouille une carte. |
+| `/givemoney` / `/submoney` | Ajoute ou retire de l'argent. |
+| `/givecardpoints` / `/subcardpoints` | Ajoute ou retire des points de carte. |
+| `/modif` | Modifie une carte existante. |
+| `/pickfor` | Tire une carte pour un joueur. |
+| `/multiplier` | Modifie le multiplicateur de gains. |
+| `/pick-timer` | Change le timer de base du `/pick`. |
+| `/probability` | Change la probabilité d'une rareté. |
+| `/setlastpickableplayerid` | Change le dernier joueur tirable. |
+| `/setqptimemultiplicator` | Change le multiplicateur de cooldown. |
+| `/updatecardimage` | Régénère l'image d'une carte. |
 
-## Interfaces avec boutons et menus
-
-Les interfaces interactives ont une validité courte pour éviter les interactions anciennes :
-
-- les boutons et menus sont réservés à la personne qui a lancé la commande ;
-- après expiration, les composants sont désactivés ;
-- l'utilisateur doit relancer la commande pour obtenir une interface fraîche.
-
-Cela concerne notamment :
-
-- `/cards`
-- `/inv`
-- `/collection`
-- `/guildcollection`
-
-## Images générées
-
-La génération d'image utilise `canvas`.
-
-Les fonctions principales sont dans :
+## Structure
 
 ```txt
-functions/secondLayerCardFunctions.js
+NewGenCard/
+|- adminCommands/       Commandes réservées aux admins
+|- assets/              Cadres des cartes par rareté
+|- commands/            Slash commands publiques
+|- data/
+|  |- constants.js      Raretés, prix, rangs, cooldowns
+|  `- guilds/           Bases SQLite par serveur
+|- functions/           Logique métier et helpers Discord
+|- deploy-commands.js   Déploiement des commandes
+|- deploy.js            Wrapper court pour déployer
+|- index.js             Entrée principale du bot
+|- newDBinit.js         Initialisation/migrations SQLite
+|- syncGuildPlayers.js  Synchronisation des membres
+`- package.json
 ```
 
-Le bot génère notamment :
+## Données et assets
 
-- l'image finale d'une carte ;
-- les previews de `/guildcollection` ;
-- les rendus avec cadre selon la rareté ;
-- le rendu spécial multicolore pour `Speciale`.
-
-## Synchronisation des membres
-
-Le bot utilise l'intent `GuildMembers`.
-
-Le système de quêtes messages utilise aussi les événements de messages. Les gateways sont activés côté code, mais il faut vérifier dans le portail Discord Developer que les intents privilégiés nécessaires au bot sont activés.
-
-À vérifier dans le portail Discord Developer :
-
-- `SERVER MEMBERS INTENT` activé ;
-- bot invité avec les permissions nécessaires ;
-- bot présent sur les serveurs ciblés.
-
-La synchronisation se fait :
-
-- au démarrage du bot ;
-- une fois par jour via le scheduler interne ;
-- quand un membre rejoint un serveur ;
-- manuellement avec `npm run sync-members`.
-
-Pour éviter les rate limits Discord, `/guildcollection` ne force pas une resynchronisation massive à chaque appel. Il lit les membres déjà enregistrés en base.
-
-## Quêtes et roue fortune
-
-Les quêtes sont stockées par serveur dans SQLite.
-
-Commandes :
-
-```bash
-/quetes
-/quetes action:reclamer
-/roue
-```
-
-Progressions suivies :
-
-- messages envoyés ;
-- `/pick` ou `/buypick` réussi ;
-- `/daily` récupéré ;
-- consultation de `/inv`, `/collection`, `/cards` ou `/guildcollection` ;
-- carte vendue ;
-- carte défaussée ;
-- trade validé ;
-- rankup confirmé.
-
-Récompenses possibles :
-
-- argent ;
-- points de carte ;
-- XP de quête ;
-- tickets de roue ;
-- réduction temporaire du cooldown `/pick`.
-
-La roue fortune consomme un ticket et peut donner argent, points, XP, ticket bonus, jackpot ou boost temporaire du cooldown `/pick`.
-
-## Déploiement des commandes
-
-Commande :
-
-```bash
-npm run deploy
-```
-
-Ou sur Pterodactyl :
-
-```bash
-node deploy.js
-```
-
-Sur un VPS configuré pour l'auto-déploiement complet :
-
-```bash
-node vps-start.js
-```
-
-Si Discord renvoie :
-
-```txt
-APPLICATION_COMMANDS_DUPLICATE_NAME
-```
-
-Cela veut dire que deux fichiers de commandes déclarent le même nom slash. Le script vérifie déjà les doublons et affiche une erreur du style :
-
-```txt
-Commande doublon dans commands: /nom
-```
-
-À vérifier :
-
-- deux fichiers dans `commands/` avec le même `.setName(...)` ;
-- deux fichiers dans `adminCommands/` avec le même `.setName(...)` ;
-- une commande publique et une commande admin déployées dans le même serveur avec le même nom.
-
-## Base de données
-
-La couche SQLite est dans :
-
-```txt
-functions/apiDB.js
-```
-
-Les bases serveur sont ignorées par Git grâce à `.gitignore` :
-
-```txt
-*.db
-*.db-*
-```
-
-Avant une migration ou un reset, faire une sauvegarde de :
-
-```txt
-data/guilds/
-```
-
-Un reset complet de la progression d'un serveur consiste à supprimer sa base :
+Les bases serveur sont stockées dans :
 
 ```txt
 data/guilds/<ID_DU_SERVEUR>.db
 ```
 
-Puis relancer :
+Ces fichiers sont ignorés par Git. Sauvegarder `data/guilds/` avant toute migration, réinstallation ou reset.
+
+Les cadres de cartes sont dans `assets/`. Le nom des fichiers doit correspondre aux raretés configurées dans `data/constants.js`, par exemple `Commun.png`, `Rare.png`, `Legendaire.png`, `Speciale.png`, `Error Code.png` et `Crystal.png`.
+
+## Notes de fonctionnement
+
+- Les bots Discord ne sont pas ajoutés comme cartes de membres.
+- La synchronisation des membres se fait au démarrage, une fois par jour, quand un membre rejoint/quitte un serveur, ou avec `npm run sync-members`.
+- Les interfaces avec boutons et menus expirent après une courte durée pour éviter les interactions trop anciennes.
+- `/guildcollection` lit les membres déjà synchronisés afin d'éviter les récupérations massives et les rate limits Discord.
+- Les raretés, prix de vente, points de discard, rangs et multiplicateurs sont centralisés dans `data/constants.js`.
+
+## Dépannage rapide
+
+Relancer les commandes slash si elles n'apparaissent pas :
+
+```bash
+npm run deploy
+```
+
+Resynchroniser les membres si une collection serveur est incomplète :
+
+```bash
+npm run sync-members
+```
+
+Vérifier `canvas`, les dépendances natives Linux et le dossier `assets/` si les images de cartes ne se génèrent pas.
+
+En cas de reset complet d'un serveur, sauvegarder puis supprimer uniquement la base concernée dans `data/guilds/`, puis relancer :
 
 ```bash
 npm run init-db
 npm run sync-members
 ```
 
-## Dépannage rapide
-
-### Le bot démarre mais aucune commande n'apparaît
-
-Relancer :
-
-```bash
-npm run deploy
-```
-
-Puis attendre quelques secondes si les commandes sont en serveur. Les commandes globales peuvent prendre beaucoup plus de temps à apparaître.
-
-### Les cartes ne se génèrent pas
-
-Vérifier :
-
-- que `canvas` est bien installé ;
-- que les dépendances Linux de `canvas` sont installées ;
-- que les fichiers dans `assets/` existent ;
-- que le salon de stockage d'images est configuré.
-
-### `/guildcollection` ne montre pas tous les membres
-
-Relancer :
-
-```bash
-npm run sync-members
-```
-
-Vérifier aussi que l'intent `GuildMembers` est activé côté Discord Developer Portal.
-
-### Erreur de rate limit opcode 8
-
-Cela vient généralement d'une récupération massive des membres Discord. Le bot évite maintenant de le faire dans `/guildcollection`; il faut préférer la synchronisation au démarrage ou `npm run sync-members`.
-
-### Le bot est bloqué en maintenance
-
-Utiliser :
-
-```txt
-/blockbot mode:false
-```
-
-Ou redémarrer le bot si nécessaire.
-
-## Checklist avant mise en production
-
-- `.env` rempli correctement.
-- `DISCORD_TOKEN` valide.
-- `CLIENT_ID` valide.
-- `GUILD_IDS` renseigné pour les serveurs ciblés.
-- `ADMIN_OVERRIDE_USER_ID` vérifié si un accès admin sans permission Discord est nécessaire.
-- Intents Discord activés.
-- `assets/` complet.
-- `npm ci --omit=dev` effectué.
-- `npm run init-db` effectué.
-- `npm run deploy` effectué.
-- `npm start` fonctionne sans erreur critique.
-
-Avec le lanceur VPS, ces trois dernières étapes peuvent être remplacées par :
-
-```bash
-node vps-start.js
-```
-
-## Idées prévues
-
-Fonctionnalités possibles pour plus tard :
-
-- roue de la fortune ;
-- événements temporaires ;
-- bonus de serveur ;
-- collections spéciales ;
-- badges ou succès ;
-- logs admin plus complets ;
-- panneau web de gestion.
-
 ## Crédits
 
-NewGenCard / Discord Card Project est une refonte et une évolution d'un projet de bot de cartes Discord existant.
+NewGenCard est une refonte et évolution d'un projet de bot de cartes Discord existant.
 
-Projet provenant de BlitzCard développé par AlMiness que je remercie pour ce code & leur accord pour la modification.
+Projet d'origine : BlitzCards, développé par AlMiness.
 
-Projet original :
+Repository original :
 
 ```txt
 https://github.com/AlMiness/BlitzCards

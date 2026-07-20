@@ -178,9 +178,9 @@ const generateCardImage = async (clientBot, cardID) => {
 	const avatarURL = await getPlayerAvatarURL(clientBot, card)
 	const avatar = await Canvas.loadImage(avatarURL)
 
-	await drawCardFrame(ctx, card)
 	drawBlurredAvatarBackground(ctx, avatar)
 	drawDiscordAvatar(ctx, avatar, card)
+	await drawCardFrame(ctx, card)
 	drawCardText(ctx, card, cardID)
 
 	return new AttachmentBuilder(cardCanvas.toBuffer('image/png'), { name: `card-${cardID}.png` })
@@ -204,9 +204,9 @@ const generateCardPreviewImage = async (clientBot, playerData, rarityName) => {
 	const avatarURL = await getPlayerAvatarURL(clientBot, previewCard)
 	const avatar = await Canvas.loadImage(avatarURL)
 
-	await drawCardFrame(ctx, previewCard)
 	drawBlurredAvatarBackground(ctx, avatar)
 	drawDiscordAvatar(ctx, avatar, previewCard)
+	await drawCardFrame(ctx, previewCard)
 	drawCardText(ctx, previewCard, 'PREVIEW')
 
 	const safeRarityName = rarity.name.replace(/[^a-z0-9_-]/gi, '-').toLowerCase()
