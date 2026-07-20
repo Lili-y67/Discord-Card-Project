@@ -66,6 +66,7 @@ const playersDataTB = "playersData"
 const questUserStatsTB = "questUserStats"
 const questDailyProgressTB = "questDailyProgress"
 const sqliteSequence = "sqlite_sequence"
+const TEXT_SETTING_PREFIX = "__text__:"
 const legacyRarityMap = {
     Commune: constants.COMMONNAME,
     Glitched: constants.ERRORCODENAME,
@@ -765,6 +766,26 @@ const setPersistentSetting = async (dataName, value) => {
     )
 }
 
+const getPersistentTextSetting = async (dataName, defaultValue = "") => {
+    const row = await DB.get(`SELECT data FROM ${otherTB} WHERE dataName = ?`, [dataName])
+    if(!row || row.data == null) return defaultValue
+
+    const value = row.data.toString()
+    if(value.startsWith(TEXT_SETTING_PREFIX)){
+        return value.slice(TEXT_SETTING_PREFIX.length)
+    }
+
+    if(/^\d{17,20}$/.test(value)){
+        return defaultValue
+    }
+
+    return defaultValue || value
+}
+
+const setPersistentTextSetting = async (dataName, value) => {
+    await setPersistentSetting(dataName, `${TEXT_SETTING_PREFIX}${value?.toString() || ""}`)
+}
+
 const getRarityWeightSettingName = (rarityName) => {
     return `rarityWeight:${rarityName}`
 }
@@ -926,6 +947,8 @@ module.exports = {
     setLastPickablePlayerID,
     getPersistentSetting,
     setPersistentSetting,
+    getPersistentTextSetting,
+    setPersistentTextSetting,
     getRarityWeightRows,
     getRarityProbabilityRows,
     setRarityProbability,

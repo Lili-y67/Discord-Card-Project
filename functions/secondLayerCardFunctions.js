@@ -415,8 +415,8 @@ const roundedRect = (ctx, x, y, width, height, radius) => {
 }
 
 const getCardImageStorageChannel = async (clientBot) => {
-	const storageGuildID = await apiDB.getPersistentSetting(IMAGES_STORAGE_GUILD_SETTING, clientBot.imagesStorageGuildID || "")
-	const storageChannelID = await apiDB.getPersistentSetting(IMAGES_STORAGE_CHANNEL_SETTING, clientBot.imagesStorageChannelID || "")
+	const storageGuildID = await apiDB.getPersistentTextSetting(IMAGES_STORAGE_GUILD_SETTING, clientBot.imagesStorageGuildID || "")
+	const storageChannelID = await apiDB.getPersistentTextSetting(IMAGES_STORAGE_CHANNEL_SETTING, clientBot.imagesStorageChannelID || "")
 
 	if(!storageGuildID || !storageChannelID){
 		throw new Error("Configure un salon de stockage avec /config ou renseigne IMAGES_STORAGE_GUILD_ID et IMAGES_STORAGE_CHANNEL_ID dans .env")

@@ -149,8 +149,8 @@ async function getCurrentSettings(client) {
         dailyMoneyMultiplierUntil: await apiDB.getPersistentSetting(DAILY_MONEY_MULTIPLIER_UNTIL_SETTING, 0),
         cardMoneyMultiplierDurationMs: await apiDB.getPersistentSetting(CARD_MONEY_MULTIPLIER_DURATION_SETTING, 24 * 60 * 60 * 1000),
         dailyMoneyMultiplierDurationMs: await apiDB.getPersistentSetting(DAILY_MONEY_MULTIPLIER_DURATION_SETTING, 24 * 60 * 60 * 1000),
-        imagesStorageGuildID: await apiDB.getPersistentSetting(IMAGES_STORAGE_GUILD_SETTING, client.imagesStorageGuildID || ""),
-        imagesStorageChannelID: await apiDB.getPersistentSetting(IMAGES_STORAGE_CHANNEL_SETTING, client.imagesStorageChannelID || "")
+        imagesStorageGuildID: await apiDB.getPersistentTextSetting(IMAGES_STORAGE_GUILD_SETTING, client.imagesStorageGuildID || ""),
+        imagesStorageChannelID: await apiDB.getPersistentTextSetting(IMAGES_STORAGE_CHANNEL_SETTING, client.imagesStorageChannelID || "")
     };
 }
 
@@ -306,8 +306,8 @@ async function handleConfigChannelSelect(client, interaction) {
     const channelID = interaction.values[0];
     const channel = await interaction.guild.channels.fetch(channelID);
     const components = await apiDB.withGuild(getConfigGuildID(interaction), async () => {
-        await apiDB.setPersistentSetting(IMAGES_STORAGE_GUILD_SETTING, interaction.guildId);
-        await apiDB.setPersistentSetting(IMAGES_STORAGE_CHANNEL_SETTING, channelID);
+        await apiDB.setPersistentTextSetting(IMAGES_STORAGE_GUILD_SETTING, interaction.guildId);
+        await apiDB.setPersistentTextSetting(IMAGES_STORAGE_CHANNEL_SETTING, channelID);
         interaction.client.imagesStorageGuildID = interaction.guildId;
         interaction.client.imagesStorageChannelID = channelID;
         return [await getConfigContainer(client, parsedInteraction.userID, parsedInteraction.expiresAt)];
@@ -414,7 +414,7 @@ function getConfigCustomID(action, userID, expiresAt, rarityName = null) {
 }
 
 function getConfigGuildID(interaction) {
-    return interaction.client.mainGuildID || interaction.guildId;
+    return interaction.guildId || interaction.client.mainGuildID;
 }
 
 function getProbabilityModal(userID, rarityName, expiresAt, currentProbability) {
