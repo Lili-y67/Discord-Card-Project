@@ -1,6 +1,6 @@
 ﻿const fs = require('node:fs');
 const path = require('node:path');
-const { Client, Collection, Events, GatewayIntentBits, Partials, PermissionFlagsBits } = require('discord.js');
+const { Client, Collection, Events, GatewayIntentBits, Partials, PermissionFlagsBits, ActivityType } = require('discord.js');
 require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 
 const token = process.env.DISCORD_TOKEN;
@@ -43,7 +43,11 @@ client.imagesStorageChannelID = imagesStorageChannelID
 client.commandsChannelID = ""
 
 client.once(Events.ClientReady, async () => {
-	console.log('Ready!');
+	client.user.setStatus('online')
+	const members = client.guilds.cache.get(process.env.GUILD_ID)
+	const membres = members.members.cache.filter(m=>!m.user.bot).size
+	client.user.setActivity({name : `${membres} membres inscrits`,type:ActivityType.Streaming,url:'https://www.youtube.com/watch?v=oJvrrZ8QIrQ'})
+	console.log(`Ready to ${client.user.tag} !`);
 	try {
 		const result = await guildPlayerSync.syncAllGuildPlayers(client);
 		console.log(`Synchronisation au démarrage : ${result.guilds} serveur(s), ${result.added} ajouté(s), ${result.updated} mis à jour, ${result.removed} retiré(s), ${result.total} membre(s) au total.`);
