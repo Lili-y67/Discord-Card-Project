@@ -19,7 +19,7 @@ module.exports = {
 			await interaction.editReply({ embeds: tryDaily.embeds});
 		}
 		else{
-			await interaction.editReply(`Vous avez déjà effectué votre /daily aujourd'hui!`)
+			await interaction.editReply(`Vous avez déjà effectué votre </daily:1527045655892328596> aujourd'hui!`)
 		}
 	},
 };
