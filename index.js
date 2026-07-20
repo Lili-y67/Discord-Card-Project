@@ -97,7 +97,6 @@ for (const file of commandFiles) {
 	const command = require(filePath);
 	//console.log(command.permissions)
 	client.commands.set(command.data.name, command);
-	client.adminCommandNames.add(command.data.name);
 	//console.log(client.commands["testadmin"])
 }
 
@@ -109,6 +108,7 @@ for (const file of commandFilesAdmin) {
 	const command = require(filePath);
 	//console.log(command.permissions)
 	client.commands.set(command.data.name, command);
+	client.adminCommandNames.add(command.data.name);
 	//console.log(client.commands["testadmin"])
 }
 

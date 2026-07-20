@@ -1,8 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-	ApplicationCommandPermissionType,
-	PermissionFlagsBits,
 	REST,
 	Routes
 } = require('discord.js');
@@ -15,7 +13,6 @@ const guildIds = (process.env.GUILD_IDS || guildId || "")
 	.map(id => id.trim())
 	.filter(Boolean);
 const token = process.env.DISCORD_TOKEN;
-const ownerId = process.env.ADMIN_OVERRIDE_USER_ID || '1147963951989149796';
 
 const loadCommands = (directoryName, transform = commandJSON => commandJSON) => {
 	const commands = [];
@@ -32,11 +29,7 @@ const loadCommands = (directoryName, transform = commandJSON => commandJSON) => 
 }
 
 const publicCommands = loadCommands('commands');
-const adminCommands = loadCommands('adminCommands', commandJSON => ({
-	...commandJSON,
-	default_member_permissions: PermissionFlagsBits.Administrator.toString()
-}));
-const adminCommandNames = new Set(adminCommands.map(command => command.name));
+const adminCommands = loadCommands('adminCommands');
 
 const assertUniqueCommandNames = (commandList, sourceName) => {
 	const seenCommands = new Map();
@@ -65,7 +58,7 @@ const rest = new REST({ version: '10' }).setToken(token);
 					{ body: [...publicCommands, ...adminCommands] },
 				);
 				console.log(`Successfully reloaded guild (/) commands for ${currentGuildID}.`);
-				await applyAdminOwnerOverride(currentGuildID, deployedCommands);
+				console.log('Admin commands are protected by the bot at runtime.');
 			}
 		}
 		else{
@@ -79,26 +72,3 @@ const rest = new REST({ version: '10' }).setToken(token);
 		console.error(error);
 	}
 })();
-
-async function applyAdminOwnerOverride(currentGuildID, deployedCommands) {
-	for(const command of deployedCommands.filter(command => adminCommandNames.has(command.name))){
-		try {
-			await rest.put(
-				Routes.applicationCommandPermissions(clientId, currentGuildID, command.id),
-				{
-					body: {
-						permissions: [
-							{
-								id: ownerId,
-								type: ApplicationCommandPermissionType.User,
-								permission: true
-							}
-						]
-					}
-				}
-			);
-		} catch(error) {
-			console.warn(`Impossible d'appliquer l'override admin pour /${command.name}: ${error.message}`);
-		}
-	}
-}

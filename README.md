@@ -110,7 +110,7 @@ Commandes npm utiles :
 
 ## Commandes admin
 
-Les commandes admin sont dans `adminCommands/`. Elles sont déployées avec la permission Discord `Administrator`, avec un accès supplémentaire pour `ADMIN_OVERRIDE_USER_ID`.
+Les commandes admin sont dans `adminCommands/`. Elles sont déployées avec les autres commandes, puis protégées par le bot à l'exécution : seuls les administrateurs Discord et `ADMIN_OVERRIDE_USER_ID` peuvent les utiliser.
 
 | Commande | Rôle |
 |---|---|
