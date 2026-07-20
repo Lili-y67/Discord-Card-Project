@@ -18,6 +18,7 @@ const collectionCardFunctions = require('./functions/secondLayerCollectionCardFu
 const apiDB = require("./functions/apiDB");
 const mentionSafety = require("./functions/mentionSafety");
 const questCore = require("./functions/questCore");
+const commandChannelConfig = require("./functions/commandChannelConfig");
 
 const logFilePath = "./logs.txt"
 const ADMIN_OVERRIDE_USER_ID = process.env.ADMIN_OVERRIDE_USER_ID || '1147963951989149796';
@@ -39,6 +40,7 @@ client.quickPickTimeMultiplicator = 1.00
 client.mainGuildID = guildId
 client.imagesStorageGuildID = imagesStorageGuildID
 client.imagesStorageChannelID = imagesStorageChannelID
+client.commandsChannelID = ""
 
 client.once(Events.ClientReady, async () => {
 	console.log('Ready!');
@@ -214,6 +216,10 @@ client.on('interactionCreate', async interaction => {
 
 	if (!command) return;
 
+	if(!(await canUseCommandInChannel(interaction, command))){
+		return;
+	}
+
 	if(client.adminCommandNames.has(interaction.commandName) && !canUseAdminCommand(interaction)){
 		await interaction.reply(mentionSafety.withSafeMentions({
 			content: "Cette commande est réservée aux administrateurs.",
@@ -261,4 +267,18 @@ client.login(token);
 const canUseAdminCommand = (interaction) => {
 	if(interaction.user.id == ADMIN_OVERRIDE_USER_ID) return true;
 	return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) || false;
+}
+
+const canUseCommandInChannel = async (interaction, command) => {
+	const configuredChannelID = await commandChannelConfig.getCommandsChannelID(apiDB, interaction.client.commandsChannelID || "");
+	interaction.client.commandsChannelID = configuredChannelID;
+
+	if(!configuredChannelID || interaction.channelId == configuredChannelID) return true;
+	if(interaction.commandName == "config" && canUseAdminCommand(interaction)) return true;
+
+	await interaction.reply(mentionSafety.withSafeMentions({
+		content: `Les commandes du bot se font dans <#${configuredChannelID}>.`,
+		ephemeral: true
+	}));
+	return false;
 }

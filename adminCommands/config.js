@@ -20,6 +20,7 @@ const apiDB = require("../functions/apiDB");
 const componentLifecycle = require("../functions/componentLifecycle");
 const constants = require("../data/constants.js");
 const mentionSafety = require("../functions/mentionSafety");
+const commandChannelConfig = require("../functions/commandChannelConfig");
 
 const OWNER_ID = process.env.ADMIN_OVERRIDE_USER_ID || '1147963951989149796';
 const ACCENT_COLOR = 0xD72306;
@@ -113,6 +114,7 @@ async function getConfigContainer(client, userID, expiresAt) {
                 `Timer de base /pick : ${formatDuration(settings.pickBaseTimerMs)}`,
                 `Boost cartes : ${formatMultiplier(settings.cardMoneyMultiplier)} ${formatBoostUntil(settings.cardMoneyMultiplierUntil, settings.cardMoneyMultiplier)}`,
                 `Boost daily : ${formatMultiplier(settings.dailyMoneyMultiplier)} ${formatBoostUntil(settings.dailyMoneyMultiplierUntil, settings.dailyMoneyMultiplier)}`,
+                `Salon commandes : ${settings.commandsChannelID ? `<#${settings.commandsChannelID}>` : "partout"}`,
                 `Storage images : ${settings.imagesStorageChannelID ? `<#${settings.imagesStorageChannelID}>` : "non configuré"}`
             ].join("\n"))
         )
@@ -130,6 +132,10 @@ async function getConfigContainer(client, userID, expiresAt) {
         .addSeparatorComponents(new SeparatorBuilder())
         .addTextDisplayComponents(text => text.setContent("Stockage des images"))
         .addActionRowComponents(getStorageChannelSelectRow(userID, expiresAt))
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addTextDisplayComponents(text => text.setContent("Salon des commandes"))
+        .addActionRowComponents(getCommandsChannelSelectRow(userID, expiresAt))
+        .addActionRowComponents(getCommandsChannelClearRow(userID, expiresAt))
         .addSeparatorComponents(new SeparatorBuilder())
         .addTextDisplayComponents(text =>
             text.setContent(`Probabilités : ${formatProbabilitySummary(probabilities)}`)
@@ -149,6 +155,7 @@ async function getCurrentSettings(client) {
         dailyMoneyMultiplierUntil: await apiDB.getPersistentSetting(DAILY_MONEY_MULTIPLIER_UNTIL_SETTING, 0),
         cardMoneyMultiplierDurationMs: await apiDB.getPersistentSetting(CARD_MONEY_MULTIPLIER_DURATION_SETTING, 24 * 60 * 60 * 1000),
         dailyMoneyMultiplierDurationMs: await apiDB.getPersistentSetting(DAILY_MONEY_MULTIPLIER_DURATION_SETTING, 24 * 60 * 60 * 1000),
+        commandsChannelID: await commandChannelConfig.getCommandsChannelID(apiDB, client.commandsChannelID || ""),
         imagesStorageGuildID: await apiDB.getPersistentTextSetting(IMAGES_STORAGE_GUILD_SETTING, client.imagesStorageGuildID || ""),
         imagesStorageChannelID: await apiDB.getPersistentTextSetting(IMAGES_STORAGE_CHANNEL_SETTING, client.imagesStorageChannelID || "")
     };
@@ -191,6 +198,25 @@ function getStorageChannelSelectRow(userID, expiresAt) {
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement);
 
     return new ActionRowBuilder().addComponents(selectMenu);
+}
+
+function getCommandsChannelSelectRow(userID, expiresAt) {
+    const selectMenu = new ChannelSelectMenuBuilder()
+        .setCustomId(getConfigCustomID("commandschannel", userID, expiresAt))
+        .setPlaceholder("Choisir le salon des commandes")
+        .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement);
+
+    return new ActionRowBuilder().addComponents(selectMenu);
+}
+
+function getCommandsChannelClearRow(userID, expiresAt) {
+    return new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(getConfigCustomID("clearcommandschannel", userID, expiresAt))
+                .setStyle(ButtonStyle.Secondary)
+                .setLabel("Commandes partout")
+        );
 }
 
 function getMultiplierSelectRow(type, userID, expiresAt, currentMultiplier) {
@@ -242,6 +268,10 @@ async function handleConfigButton(client, interaction) {
     if(!(await canUseConfigInteraction(interaction, parsedInteraction))) return true;
 
     const components = await apiDB.withGuild(getConfigGuildID(interaction), async () => {
+        if(parsedInteraction.action == "clearcommandschannel"){
+            await commandChannelConfig.setCommandsChannelID(apiDB, "");
+            interaction.client.commandsChannelID = "";
+        }
         return [await getConfigContainer(client, parsedInteraction.userID, parsedInteraction.expiresAt)];
     });
     await interaction.update(mentionSafety.withSafeMentions({ components }));
@@ -299,17 +329,25 @@ async function handleConfigSelect(client, interaction) {
 
 async function handleConfigChannelSelect(client, interaction) {
     const parsedInteraction = parseConfigCustomID(interaction.customId);
-    if(!parsedInteraction || parsedInteraction.action != "storagechannel") return false;
+    if(!parsedInteraction || !["storagechannel", "commandschannel"].includes(parsedInteraction.action)) return false;
 
     if(!(await canUseConfigInteraction(interaction, parsedInteraction))) return true;
 
     const channelID = interaction.values[0];
     const channel = await interaction.guild.channels.fetch(channelID);
     const components = await apiDB.withGuild(getConfigGuildID(interaction), async () => {
-        await apiDB.setPersistentTextSetting(IMAGES_STORAGE_GUILD_SETTING, interaction.guildId);
-        await apiDB.setPersistentTextSetting(IMAGES_STORAGE_CHANNEL_SETTING, channelID);
-        interaction.client.imagesStorageGuildID = interaction.guildId;
-        interaction.client.imagesStorageChannelID = channelID;
+        if(parsedInteraction.action == "storagechannel"){
+            await apiDB.setPersistentTextSetting(IMAGES_STORAGE_GUILD_SETTING, interaction.guildId);
+            await apiDB.setPersistentTextSetting(IMAGES_STORAGE_CHANNEL_SETTING, channelID);
+            interaction.client.imagesStorageGuildID = interaction.guildId;
+            interaction.client.imagesStorageChannelID = channelID;
+        }
+
+        if(parsedInteraction.action == "commandschannel"){
+            await commandChannelConfig.setCommandsChannelID(apiDB, channelID);
+            interaction.client.commandsChannelID = channelID;
+        }
+
         return [await getConfigContainer(client, parsedInteraction.userID, parsedInteraction.expiresAt)];
     });
 
