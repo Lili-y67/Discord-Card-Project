@@ -1,12 +1,16 @@
 const crypto = require("node:crypto");
 const {
     ActionRowBuilder,
+    LabelBuilder,
     MessageFlags,
     ModalBuilder,
     PermissionFlagsBits,
     SlashCommandBuilder,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    UserSelectMenuBuilder
 } = require("discord.js");
 const apiDB = require("../functions/apiDB");
 const constants = require("../data/constants");
@@ -54,8 +58,20 @@ module.exports = {
             await interaction.reply({ content: "Ce formulaire ne t’appartient pas.", flags: MessageFlags.Ephemeral });
             return true;
         }
-        const player = await apiDB.findPlayerData(interaction.fields.getTextInputValue("player"));
-        const rarity = normalizeRarity(interaction.fields.getTextInputValue("rarity"));
+        const selectedUser = interaction.fields.getSelectedUsers("player", true).first();
+        const selectedMember = interaction.fields.getSelectedMembers("player")?.first();
+        if(selectedUser?.bot){
+            await interaction.reply({ content: "Choisis un membre humain pour la carte.", flags: MessageFlags.Ephemeral });
+            return true;
+        }
+        if(selectedUser){
+            await apiDB.upsertGuildPlayer(
+                selectedUser.id,
+                selectedMember?.nickname || selectedUser.username || selectedUser.globalName
+            );
+        }
+        const player = selectedUser ? await apiDB.findPlayerData(selectedUser.id) : null;
+        const rarity = interaction.fields.getStringSelectValues("rarity")[0] || null;
         const amount = parseBoundedInteger(interaction.fields.getTextInputValue("amount"), 0, 1000000);
         const copies = parseBoundedInteger(interaction.fields.getTextInputValue("copies"), 1, 10);
         if(!player || !rarity || amount === null || copies === null){
@@ -82,9 +98,21 @@ const createDropData = (creatorID, type, maxWinners, expiresAt, reward) => ({
 const getCardDropModal = (userID, maxWinners, expiresAt) => new ModalBuilder()
     .setCustomId(`drop:card:${userID}:${maxWinners}:${expiresAt}`)
     .setTitle("Créer un drop de cartes")
+    .addLabelComponents(
+        new LabelBuilder()
+            .setLabel("Joueur")
+            .setDescription("Choisir un membre du serveur")
+            .setUserSelectMenuComponent(new UserSelectMenuBuilder()
+                .setCustomId("player").setMinValues(1).setMaxValues(1)),
+        new LabelBuilder()
+            .setLabel("Rareté")
+            .setDescription("Choisir la rareté des cartes")
+            .setStringSelectMenuComponent(new StringSelectMenuBuilder()
+                .setCustomId("rarity").setMinValues(1).setMaxValues(1)
+                .addOptions(constants.RARITIES.map(rarity => new StringSelectMenuOptionBuilder()
+                    .setLabel(rarity.name).setValue(rarity.name))))
+    )
     .addComponents(
-        inputRow("player", "Joueur", "ID ou nom du joueur", true),
-        inputRow("rarity", "Rareté", constants.RARITIES.map(r => r.name).join(", ").slice(0, 100), true),
         inputRow("amount", "Montant à donner au gagnant", "0", false, "0"),
         inputRow("copies", "Exemplaires par gagnant", "1 à 10", true, "1")
     );
@@ -103,11 +131,6 @@ const parseModalID = customID => {
     const expiresAt = Number(parts[4]);
     if(!Number.isInteger(maxWinners) || !Number.isInteger(expiresAt)) return null;
     return { userID: parts[2], maxWinners, expiresAt };
-};
-
-const normalizeRarity = value => {
-    const normalized = value.trim().toLocaleLowerCase("fr-FR");
-    return constants.RARITIES.find(rarity => rarity.name.toLocaleLowerCase("fr-FR") === normalized)?.name || null;
 };
 
 const parseBoundedInteger = (value, min, max) => {
