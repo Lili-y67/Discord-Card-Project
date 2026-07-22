@@ -253,7 +253,7 @@ const getPlayerRarityStatusText = (playerCollection) => {
 
 const getPlayerDisplay = (playerData) => {
     const name = mentionSafety.escapeMarkdown(playerData?.playerName || `Joueur ${playerData?.playerID ?? "?"}`)
-    return /^\d{17,20}$/.test(playerData?.discordID || "") ? `**${name}** (\`${playerData.discordID}\`)` : `**${name}**`
+    return /^\d{17,20}$/.test(playerData?.discordID || "") ? `**${name}** (<@${playerData.discordID}>)` : `**${name}**`
 }
 
 const getPlayerOptionLabel = (playerData) => {

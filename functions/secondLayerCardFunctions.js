@@ -142,15 +142,15 @@ const getUserDisplay = async (clientBot, userID) => {
 	try {
 		const user = await clientBot.users.fetch(safeUserID, { force: true })
 		const name = user.globalName || user.username
-		return `${mentionSafety.escapeMarkdown(name)} (\`${safeUserID}\`)`
+		return `${mentionSafety.escapeMarkdown(name)} (<@${safeUserID}>)`
 	} catch(error) {
 		try {
 			const storedUser = await apiDB.getAUserFromDiscordID(safeUserID)
-			if(storedUser?.name) return `${mentionSafety.escapeMarkdown(storedUser.name)} (\`${safeUserID}\`)`
+			if(storedUser?.name) return `${mentionSafety.escapeMarkdown(storedUser.name)} (<@${safeUserID}>)`
 		} catch(databaseError) {
 			// La base peut ne plus contenir ce compte.
 		}
-		return `Utilisateur \`${safeUserID}\``
+		return `Utilisateur (<@${safeUserID}>)`
 	}
 }
 
