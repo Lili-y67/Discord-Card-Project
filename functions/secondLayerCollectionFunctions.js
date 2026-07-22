@@ -1,9 +1,18 @@
-const { EmbedBuilder } = require('discord.js');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, SeparatorBuilder } = require('discord.js');
+﻿const {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ContainerBuilder,
+    EmbedBuilder,
+    MessageFlags,
+    SeparatorBuilder,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder
+} = require('discord.js');
 
 const constants = require("../data/constants.js")
 const apiDB = require("./apiDB");
-const buttonCenter = require("../functions/buttonCenter")
+const componentLifecycle = require("./componentLifecycle");
 const mentionSafety = require("./mentionSafety");
 
 const COLLECTION_ACCENT_COLOR = 0xD72306;
@@ -11,18 +20,22 @@ const COLLECTION_PLAYERS_PER_PAGE = Math.min(constants.PLAYERSPERCOLLECTIONPAGE,
 const HAS_MARK = "✅";
 const HASNT_MARK = "❌";
 
-const getCollectionReply = async (client, interaction, userCollection, currentPage, requestedUser) => {
-    const buttonRows = await getSwitchPagesButtons(client, interaction, currentPage, userCollection, requestedUser);
-    return {
-        components: [await getCollectionContainer(userCollection, currentPage, requestedUser, buttonRows)],
-        flags: MessageFlags.IsComponentsV2,
-        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
-    };
+const getCollectionReply = async (client, interaction, userCollection, currentPage, requestedUser, expiresAt = componentLifecycle.createExpiresAt(), selectedPlayerID = 0) => {
+    return mentionSafety.withSafeMentions({
+        components: [await getCollectionContainer(userCollection, currentPage, requestedUser, interaction.user.id, requestedUser.id, expiresAt, selectedPlayerID)],
+        flags: MessageFlags.IsComponentsV2
+    });
 }
 
-const getCollectionContainer = async (userCollection, currentPage, user, buttonRows) => {
+const getCollectionContainer = async (userCollection, currentPage, user, ownerID = user.id, requestedUserID = user.id, expiresAt = componentLifecycle.createExpiresAt(), selectedPlayerID = 0) => {
     let playerIDs = Object.keys(userCollection).map(Number).sort((a, b) => a - b)
     let keysNumber = playerIDs.length
+    const totalPageNumber = getTotalPages(keysNumber)
+    const page = clampPage(currentPage, totalPageNumber)
+    const pagePlayerIDs = playerIDs.slice(COLLECTION_PLAYERS_PER_PAGE * (page - 1), COLLECTION_PLAYERS_PER_PAGE * page)
+    const selectedID = Number(selectedPlayerID) || 0
+    const shownPlayerIDs = selectedID ? [selectedID] : pagePlayerIDs
+
     const container = new ContainerBuilder()
         .setAccentColor(COLLECTION_ACCENT_COLOR)
         .addTextDisplayComponents(text =>
@@ -36,34 +49,26 @@ const getCollectionContainer = async (userCollection, currentPage, user, buttonR
         );
     }
 
-    let totalPageNumber = keysNumber%COLLECTION_PLAYERS_PER_PAGE != 0 ? parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE) + 1 : parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE)
-
-    if(currentPage > totalPageNumber) return
-
-    let playerDataList = []
-
-    for(const playerID of playerIDs.slice(COLLECTION_PLAYERS_PER_PAGE * (currentPage - 1), COLLECTION_PLAYERS_PER_PAGE * currentPage)){
-        playerDataList.push(apiDB.getPlayerDataFromID(playerID))
-    }
-
-    const resolvedPlayers = await Promise.all(playerDataList)
-    for(const player of resolvedPlayers){
+    const resolvedPlayers = await Promise.all(shownPlayerIDs.map(playerID => apiDB.getPlayerDataFromID(playerID)))
+    for(const player of resolvedPlayers.filter(Boolean)){
         container.addTextDisplayComponents(text =>
             text.setContent(`${getPlayerDisplay(player)}\n${getPlayerRarityStatusText(userCollection[player.playerID] || {})}`)
         );
     }
 
-    container
-        .addTextDisplayComponents(text =>
-            text.setContent(`-# Page ${currentPage.toString()} sur ${totalPageNumber.toString()}`)
-        )
-        .addActionRowComponents(buttonRows);
+    container.addTextDisplayComponents(text =>
+        text.setContent(selectedID
+            ? `-# Membre ciblé · Page ${page.toString()} sur ${totalPageNumber.toString()}`
+            : `-# Page ${page.toString()} sur ${totalPageNumber.toString()}`)
+    );
 
-    return container;
+    return container
+        .addActionRowComponents(getCollectionNavigationRow(ownerID, requestedUserID, page, totalPageNumber, selectedID, expiresAt))
+        .addActionRowComponents(await getCollectionPlayerSelectRow(ownerID, requestedUserID, page, pagePlayerIDs, selectedID, expiresAt));
 }
 
 const getCollectionEmbed = async (userCollection, currentPage, user) => {
-    const container = await getCollectionContainer(userCollection, currentPage, user, new ActionRowBuilder());
+    const container = await getCollectionContainer(userCollection, currentPage, user);
     return new EmbedBuilder()
         .setColor('#D72306')
         .setTitle('Collection')
@@ -86,54 +91,112 @@ const getCollectionStatsEmbed = async (userCollectionStats, user) => {
     .setFooter({ text: `Fun fact : collection en cours de consultation`});
 }
 
-const getSwitchPagesButtons = async (client, interaction, currentPage, userCollection, requestedUser) => {
-    let buttonGroupID = await buttonCenter.registerAButtonGroup(client, expirationFunction, interaction, {})
-
-    let nextPageButtonID = await buttonCenter.registerAButton(client, "NextPageCollection", buttonGroupID, nextPageFunction, {userCollection:userCollection, currentPage:currentPage, requestedUser:requestedUser}, false, [interaction.user.id])
-
-    let previousPageButton = await buttonCenter.registerAButton(client, "PreviousPageCollection", buttonGroupID, preivousPageFunction, {userCollection:userCollection, currentPage:currentPage, requestedUser:requestedUser}, false, [interaction.user.id])
-
-    let buttonRows = new ActionRowBuilder()
+const getCollectionNavigationRow = (ownerID, requestedUserID, currentPage, totalPages, selectedPlayerID, expiresAt) => {
+    return new ActionRowBuilder()
     .addComponents(
         new ButtonBuilder()
-        .setCustomId(previousPageButton)
-        .setStyle(ButtonStyle.Primary)
-        .setLabel("Précédent")
-        .setEmoji("⬅️"),
+            .setCustomId(getCollectionCustomID("page", ownerID, requestedUserID, currentPage - 1, selectedPlayerID, expiresAt))
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji("⬅️")
+            .setDisabled(currentPage <= 1),
 
         new ButtonBuilder()
-            .setCustomId(nextPageButtonID)
+            .setCustomId(getCollectionCustomID("clear", ownerID, requestedUserID, currentPage, 0, expiresAt))
+            .setStyle(ButtonStyle.Secondary)
+            .setLabel(`Page ${currentPage}/${totalPages}`)
+            .setDisabled(!selectedPlayerID),
+
+        new ButtonBuilder()
+            .setCustomId(getCollectionCustomID("page", ownerID, requestedUserID, currentPage + 1, selectedPlayerID, expiresAt))
             .setStyle(ButtonStyle.Primary)
-            .setLabel("Suivant")
-            .setEmoji("➡️"),
+            .setEmoji("➡️")
+            .setDisabled(currentPage >= totalPages),
     );
+}
 
-    if(currentPage == 1){
-        buttonRows.components[0].setDisabled(true)
+const getCollectionPlayerSelectRow = async (ownerID, requestedUserID, currentPage, playerIDs, selectedPlayerID, expiresAt) => {
+    const players = (await Promise.all(playerIDs.map(playerID => apiDB.getPlayerDataFromID(playerID)))).filter(Boolean);
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId(getCollectionCustomID("member", ownerID, requestedUserID, currentPage, selectedPlayerID, expiresAt))
+        .setPlaceholder("Cibler un membre de cette page")
+        .addOptions(players.map(player =>
+            new StringSelectMenuOptionBuilder()
+                .setLabel(getPlayerOptionLabel(player))
+                .setDescription(`Voir uniquement cette collection`)
+                .setValue(player.playerID.toString())
+                .setDefault(Number(selectedPlayerID) == Number(player.playerID))
+        ));
+
+    return new ActionRowBuilder().addComponents(selectMenu);
+}
+
+const handleCollectionButton = async (client, interaction) => {
+    const parsedInteraction = parseCollectionCustomID(interaction.customId);
+    if(!parsedInteraction) return false;
+
+    if(!(await canUseCollectionInteraction(interaction, parsedInteraction))) return true;
+
+    const page = parsedInteraction.action == "page" ? parsedInteraction.page : parsedInteraction.page;
+    const selectedPlayerID = parsedInteraction.action == "clear" ? 0 : parsedInteraction.selectedPlayerID;
+    await updateCollectionInteraction(client, interaction, parsedInteraction, page, selectedPlayerID);
+    return true;
+}
+
+const handleCollectionSelect = async (client, interaction) => {
+    const parsedInteraction = parseCollectionCustomID(interaction.customId);
+    if(!parsedInteraction || parsedInteraction.action != "member") return false;
+
+    if(!(await canUseCollectionInteraction(interaction, parsedInteraction))) return true;
+
+    await updateCollectionInteraction(client, interaction, parsedInteraction, parsedInteraction.page, Number(interaction.values[0]));
+    return true;
+}
+
+const updateCollectionInteraction = async (client, interaction, parsedInteraction, page, selectedPlayerID) => {
+    const requestedUser = await client.users.fetch(parsedInteraction.requestedUserID);
+    const userCollection = await getCollectionOfAUser(requestedUser.id);
+    const expiresAt = componentLifecycle.createExpiresAt();
+    await interaction.update(await getCollectionReply(client, interaction, userCollection, page, requestedUser, expiresAt, selectedPlayerID));
+    componentLifecycle.scheduleInteractionExpiration(interaction, "collection", expiresAt);
+}
+
+const canUseCollectionInteraction = async (interaction, parsedInteraction) => {
+    if(componentLifecycle.isExpired(parsedInteraction.expiresAt)){
+        await componentLifecycle.expireInteractedMessage(interaction, "collection", interaction.commandId);
+        return false;
     }
-    let keysNumber = Object.keys(userCollection).length
-    const totalPageNumber = Math.max(1, keysNumber%COLLECTION_PLAYERS_PER_PAGE != 0 ? parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE) + 1 : parseInt(keysNumber/COLLECTION_PLAYERS_PER_PAGE))
-    if(currentPage >= totalPageNumber){
-        buttonRows.components[1].setDisabled(true)
-    }
 
-    return buttonRows
+    if(interaction.user.id == parsedInteraction.ownerID) return true;
+
+    await interaction.reply({
+        content: "Cette collection ne t'appartient pas.",
+        flags: MessageFlags.Ephemeral,
+        allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
+    });
+    return false;
 }
 
-const expirationFunction = async (client, genesisInteraction, customDataDictionary) => {
-    //rien je suppose...
+const parseCollectionCustomID = (customID) => {
+    const parts = customID.split(":");
+    if(parts.length != 7 || parts[0] != "collection") return null;
+
+    const page = Number(parts[4]);
+    const selectedPlayerID = Number(parts[5]);
+    const expiresAt = Number(parts[6]);
+    if(!Number.isInteger(page) || !Number.isInteger(selectedPlayerID) || !Number.isInteger(expiresAt)) return null;
+
+    return {
+        action: parts[1],
+        ownerID: parts[2],
+        requestedUserID: parts[3],
+        page,
+        selectedPlayerID,
+        expiresAt
+    };
 }
 
-const nextPageFunction = async (client, currentInteraction, genesisInteraction, customDataDictionary) => {
-    let buttonRows = await getSwitchPagesButtons(client, genesisInteraction, customDataDictionary.currentPage + 1, customDataDictionary.userCollection, customDataDictionary.requestedUser)
-    await genesisInteraction.editReply(mentionSafety.withSafeMentions({components:[await getCollectionContainer(customDataDictionary.userCollection, customDataDictionary.currentPage + 1, customDataDictionary.requestedUser, buttonRows)]}))
-    currentInteraction.deferUpdate()
-}
-
-const preivousPageFunction = async (client, currentInteraction, genesisInteraction, customDataDictionary) => {
-    let buttonRows = await getSwitchPagesButtons(client, genesisInteraction, customDataDictionary.currentPage - 1, customDataDictionary.userCollection, customDataDictionary.requestedUser)
-    await genesisInteraction.editReply(mentionSafety.withSafeMentions({components:[await getCollectionContainer(customDataDictionary.userCollection, customDataDictionary.currentPage - 1, customDataDictionary.requestedUser, buttonRows)]}))
-    currentInteraction.deferUpdate()
+const getCollectionCustomID = (action, ownerID, requestedUserID, page, selectedPlayerID, expiresAt) => {
+    return `collection:${action}:${ownerID}:${requestedUserID}:${page}:${selectedPlayerID || 0}:${expiresAt}`;
 }
 
 const getCollectionOfAUser = async (discordID) => {
@@ -193,16 +256,25 @@ const getPlayerDisplay = (playerData) => {
     return /^\d{17,20}$/.test(playerData?.discordID || "") ? `<@${playerData.discordID}>` : (playerData?.playerName || `Joueur ${playerData?.playerID ?? "?"}`)
 }
 
+const getPlayerOptionLabel = (playerData) => {
+    const label = playerData?.playerName || `Joueur ${playerData?.playerID ?? "?"}`;
+    return label.slice(0, 100);
+}
+
 const getUserDisplay = (user) => {
     return /^\d{17,20}$/.test(user?.id || "") ? `<@${user.id}>` : (user?.username || "cet utilisateur")
 }
+
+const getTotalPages = (itemsNumber) => Math.max(1, Math.ceil(Number(itemsNumber || 0) / COLLECTION_PLAYERS_PER_PAGE));
+const clampPage = (page, totalPages) => Math.min(Math.max(Number(page) || 1, 1), totalPages);
 
 module.exports = {
     getCollectionOfAUser,
     getCollectionReply,
     getCollectionContainer,
     getCollectionEmbed,
-    getSwitchPagesButtons,
     getEachRarityCardsNumbers,
-    getCollectionStatsEmbed
+    getCollectionStatsEmbed,
+    handleCollectionButton,
+    handleCollectionSelect
 };

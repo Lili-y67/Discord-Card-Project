@@ -20,11 +20,11 @@ module.exports = {
 		}
 		if(tryPick.picked){
 			await questCore.trackEvent(interaction.user.id, "card_picked")
-			await interaction.editReply({ embeds: tryPick.embeds});
+			await interaction.editReply(await pickFunctions.getPickReply(interaction.client, interaction.user, tryPick.cardID, tryPick.balanceChange));
 		}
 		else{
 			const nextPickUnix = Math.ceil(tryPick.nextPickTimestamp / 1000)
-			await interaction.editReply(`Vous pourrez à nouveau tirer une carte <t:${nextPickUnix}:R> (<t:${nextPickUnix}:F>).`)
+			await interaction.editReply(`Vous pourrez à nouveau tirer une carte le <t:${nextPickUnix}:F> à <t:${nextPickUnix}:T>.`)
 		}
 	},
 };

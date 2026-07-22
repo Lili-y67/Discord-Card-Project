@@ -35,6 +35,7 @@ const IMAGES_STORAGE_GUILD_SETTING = "imagesStorageGuildID";
 const IMAGES_STORAGE_CHANNEL_SETTING = "imagesStorageChannelID";
 
 const PICK_TIMER_CHOICES = [
+    { name: "Sans cooldown (pick illimité)", value: 0 },
     { name: "15 minutes", value: 15 * 60 * 1000 },
     { name: "30 minutes", value: 30 * 60 * 1000 },
     { name: "45 minutes", value: 45 * 60 * 1000 },
@@ -522,6 +523,7 @@ async function saveBoostDuration(action, durationMs) {
 }
 
 function formatDuration(milliseconds) {
+    if(Number(milliseconds) === 0) return "illimité (sans cooldown)";
     const minutes = Math.round(Number(milliseconds) / 60000);
     if(minutes < 60) return `${minutes} min`;
     const hours = Math.floor(minutes / 60);

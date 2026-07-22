@@ -65,6 +65,8 @@ const otherTB = "other"
 const playersDataTB = "playersData"
 const questUserStatsTB = "questUserStats"
 const questDailyProgressTB = "questDailyProgress"
+const dropsTB = "drops"
+const dropClaimsTB = "dropClaims"
 const sqliteSequence = "sqlite_sequence"
 const TEXT_SETTING_PREFIX = "__text__:"
 const legacyRarityMap = {
@@ -89,6 +91,7 @@ const ensureDatabaseSchema = async () => {
         "gotNotificationYet" INTEGER,
         "rankID" INTEGER,
         "cardPoints" INTEGER,
+        "dailyCount" INTEGER DEFAULT 0,
         PRIMARY KEY("discordID")
     )`)
 
@@ -144,9 +147,30 @@ const ensureDatabaseSchema = async () => {
         PRIMARY KEY("discordID", "questDate", "questID")
     )`)
 
+    await DB.run(`CREATE TABLE IF NOT EXISTS "${dropsTB}" (
+        "dropID" TEXT NOT NULL UNIQUE,
+        "type" TEXT NOT NULL,
+        "creatorID" TEXT NOT NULL,
+        "amount" INTEGER DEFAULT 0,
+        "playerID" INTEGER,
+        "rarity" TEXT,
+        "copies" INTEGER DEFAULT 1,
+        "maxWinners" INTEGER DEFAULT 1,
+        "expiresAt" INTEGER NOT NULL,
+        "status" TEXT DEFAULT 'open',
+        PRIMARY KEY("dropID")
+    )`)
+    await DB.run(`CREATE TABLE IF NOT EXISTS "${dropClaimsTB}" (
+        "dropID" TEXT NOT NULL,
+        "userID" TEXT NOT NULL,
+        "claimedStamp" INTEGER NOT NULL,
+        PRIMARY KEY("dropID", "userID")
+    )`)
+
     await addColumnIfMissing(questUserStatsTB, "lastQuestMessageStamp", "INTEGER DEFAULT 0")
     await addColumnIfMissing(questUserStatsTB, "pickBoostUntil", "INTEGER DEFAULT 0")
     await addColumnIfMissing(questUserStatsTB, "pickBoostMultiplier", "REAL DEFAULT 1")
+    await addColumnIfMissing(usersDataTB, "dailyCount", "INTEGER DEFAULT 0")
     schemaReady.add(schemaKey)
 }
 
@@ -261,19 +285,15 @@ const changeCardOwnership = async (cardID, newOwnerID) => {
 const bulkChangeCardOwnership = async (cardsIDList, newOwnerID) => {
 
     if(!cardsIDList.length) return;
-
-    let bulkChangeCardOwnershipQuery = `UPDATE ${cardsDataTB} SET 'ownerID' = ${newOwnerID},  'lastOwnerChangeStamp' = ${Date.now().toString()} WHERE cardID=${cardsIDList[0]}`
-
-    for(let cardIndex = 1; cardIndex<cardsIDList.length; cardIndex++){
-        bulkChangeCardOwnershipQuery = bulkChangeCardOwnershipQuery + ` OR cardID=${cardsIDList[cardIndex]}`
-    }
-
-    await DB.run(bulkChangeCardOwnershipQuery)
+    const placeholders = cardsIDList.map(() => "?").join(", ")
+    await DB.run(
+        `UPDATE ${cardsDataTB} SET ownerID = ?, lastOwnerChangeStamp = ? WHERE cardID IN (${placeholders})`,
+        [newOwnerID.toString(), Date.now(), ...cardsIDList]
+    )
 }
 
 const setCardOwnerID = async (cardID, newOwnerID) => {
-    let setCardOwnerIDQuery = `UPDATE ${cardsDataTB} SET 'ownerID' = ${newOwnerID} WHERE cardID=${cardID.toString()}`
-    await DB.run(setCardOwnerIDQuery)
+    await DB.run(`UPDATE ${cardsDataTB} SET ownerID = ? WHERE cardID = ?`, [newOwnerID.toString(), cardID])
 }
 
 const updateLastCardOwnerChangeTime = async (cardID) => {
@@ -282,8 +302,7 @@ const updateLastCardOwnerChangeTime = async (cardID) => {
 }
 
 const doesUserOwnThisCard = async (cardID, discordID) => {
-    let doesUserOwnThisCardQuery = `SELECT cardID FROM ${cardsDataTB} WHERE cardID=${cardID.toString()} AND ownerID=${discordID}`
-    return (await DB.get(doesUserOwnThisCardQuery)) ? true : false
+    return (await DB.get(`SELECT cardID FROM ${cardsDataTB} WHERE cardID = ? AND ownerID = ?`, [cardID, discordID.toString()])) ? true : false
 }
 
 const lockACard = async (cardID) => {
@@ -414,19 +433,18 @@ const getCardsIDListHUB = async (args={ownerID:false, creatorID:false, excludedU
 }
 
 const getDistinctPlayerIDAndRarityInUserInventory = async (discordID) => {
-    let getDistinctPlayerIDAndRarityInUserInventoryQuery = `SELECT DISTINCT playerID, rarity from ${cardsDataTB} where ownerID=${discordID.toString()}`
-    const cards = await DB.all(getDistinctPlayerIDAndRarityInUserInventoryQuery)
+    const cards = await DB.all(`SELECT DISTINCT playerID, rarity FROM ${cardsDataTB} WHERE ownerID = ?`, [discordID.toString()])
     return cards.map(normalizeCardRarity)
 }
 
 const getPickedCardsNumberOfAUser = async (discordID) => {
-    let getPickedCardNumberOfAUserQuery = `SELECT cardID FROM ${cardsDataTB} WHERE creatorID=${discordID.toString()}`
-    return (await DB.all(getPickedCardNumberOfAUserQuery)).length
+    const row = await DB.get(`SELECT COUNT(*) AS total FROM ${cardsDataTB} WHERE creatorID = ?`, [discordID.toString()])
+    return Number(row?.total) || 0
 }
 
 const getOwnedCardsNumberOfAUser = async (discordID) => {
-    let getOwnedCardsNumberOfAUserQuery = `SELECT cardID FROM ${cardsDataTB} WHERE ownerID=${discordID.toString()}`
-    return (await DB.all(getOwnedCardsNumberOfAUserQuery)).length
+    const row = await DB.get(`SELECT COUNT(*) AS total FROM ${cardsDataTB} WHERE ownerID = ?`, [discordID.toString()])
+    return Number(row?.total) || 0
 }
 
 const editACard = async (cardID, args={rarityValue:false, rarity:false, playerID:false}) => {
@@ -473,6 +491,52 @@ const getRandomPickablePlayerID = async () => {
          LIMIT 1`
     )
     return row ? row.playerID : 0
+}
+
+const findPlayerData = async (query) => {
+    const normalized = query?.toString().trim()
+    if(!normalized) return null
+    if(/^\d+$/.test(normalized)){
+        const byID = await DB.get(`SELECT * FROM ${playersDataTB} WHERE playerID = ? OR discordID = ? LIMIT 1`, [Number(normalized), normalized])
+        if(byID) return byID
+    }
+    return await DB.get(`SELECT * FROM ${playersDataTB} WHERE playerName LIKE ? COLLATE NOCASE ORDER BY playerName LIMIT 1`, [`%${normalized}%`])
+}
+
+const createDrop = async (drop) => {
+    await ensureDatabaseSchema()
+    await DB.run(`INSERT INTO ${dropsTB} (dropID, type, creatorID, amount, playerID, rarity, copies, maxWinners, expiresAt, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`, [drop.dropID, drop.type, drop.creatorID, drop.amount || 0, drop.playerID || null, drop.rarity || null, drop.copies || 1, drop.maxWinners, drop.expiresAt])
+}
+
+const getDrop = async (dropID) => {
+    await ensureDatabaseSchema()
+    return await DB.get(`SELECT * FROM ${dropsTB} WHERE dropID = ?`, [dropID])
+}
+
+const getDropClaims = async (dropID) => {
+    await ensureDatabaseSchema()
+    return await DB.all(`SELECT * FROM ${dropClaimsTB} WHERE dropID = ? ORDER BY claimedStamp`, [dropID])
+}
+
+const claimDropSlot = async (dropID, userID) => {
+    await ensureDatabaseSchema()
+    const token = Date.now() * 1000 + Math.floor(Math.random() * 1000)
+    await DB.run(`INSERT OR IGNORE INTO ${dropClaimsTB} (dropID, userID, claimedStamp)
+        SELECT d.dropID, ?, ? FROM ${dropsTB} d
+        WHERE d.dropID = ? AND d.status = 'open' AND d.expiresAt > ?
+          AND (SELECT COUNT(*) FROM ${dropClaimsTB} c WHERE c.dropID = d.dropID) < d.maxWinners`,
+        [userID.toString(), token, dropID, Date.now()])
+    const claim = await DB.get(`SELECT claimedStamp FROM ${dropClaimsTB} WHERE dropID = ? AND userID = ?`, [dropID, userID.toString()])
+    const drop = await getDrop(dropID)
+    const claims = await getDropClaims(dropID)
+    if(drop && claims.length >= drop.maxWinners) await DB.run(`UPDATE ${dropsTB} SET status = 'complete' WHERE dropID = ?`, [dropID])
+    return { won: claim?.claimedStamp === token, alreadyClaimed: Boolean(claim) && claim.claimedStamp !== token, drop, claims }
+}
+
+const releaseDropClaim = async (dropID, userID) => {
+    await DB.run(`DELETE FROM ${dropClaimsTB} WHERE dropID = ? AND userID = ?`, [dropID, userID.toString()])
+    await DB.run(`UPDATE ${dropsTB} SET status = 'open' WHERE dropID = ?`, [dropID])
 }
 
 //>playersNames
@@ -539,6 +603,27 @@ const getCardPointstopRowsList = async() => {
     return await DB.all(getCardPointstopRowsListQuery)
 }
 
+const getOwnedCardTopRowsList = async() => {
+    return await DB.all(`SELECT u.name, COUNT(c.cardID) AS ownedCards
+        FROM ${usersDataTB} u LEFT JOIN ${cardsDataTB} c ON c.ownerID = u.discordID
+        GROUP BY u.discordID, u.name ORDER BY ownedCards DESC, u.name COLLATE NOCASE`)
+}
+
+const getPickTopRowsList = async() => {
+    return await DB.all(`SELECT u.name, COUNT(c.cardID) AS pickCount
+        FROM ${usersDataTB} u LEFT JOIN ${cardsDataTB} c ON c.creatorID = u.discordID
+        GROUP BY u.discordID, u.name ORDER BY pickCount DESC, u.name COLLATE NOCASE`)
+}
+
+const getDailyTopRowsList = async() => {
+    return await DB.all(`SELECT name, COALESCE(dailyCount, 0) AS dailyCount
+        FROM ${usersDataTB} ORDER BY dailyCount DESC, name COLLATE NOCASE`)
+}
+
+const incrementDailyCount = async (discordID) => {
+    await DB.run(`UPDATE ${usersDataTB} SET dailyCount = COALESCE(dailyCount, 0) + 1 WHERE discordID = ?`, [discordID.toString()])
+}
+
 //>cardPoints managements
 
 
@@ -553,8 +638,7 @@ const createAUser = async (discordID, name) => {
 }
 
 const getAUserFromDiscordID = async (discordID) => {
-    let getUserQuery = `SELECT * FROM ${usersDataTB} WHERE discordID=${discordID.toString()}`
-    return await DB.get(getUserQuery)
+    return await DB.get(`SELECT * FROM ${usersDataTB} WHERE discordID = ?`, [discordID.toString()])
 }
 
 const isUserRegistered = async (discordID) => {
@@ -563,6 +647,7 @@ const isUserRegistered = async (discordID) => {
 }
 
 const prepareUser = async (discordID, name) => {
+    await ensureDatabaseSchema()
     if(!(await isUserRegistered(discordID))){
         await createAUser(discordID, name)
     }
@@ -962,6 +1047,10 @@ module.exports = {
     getCardPointsOfUser,
     hasEnoughCardPoints,
     getCardPointstopRowsList,
+    getOwnedCardTopRowsList,
+    getPickTopRowsList,
+    getDailyTopRowsList,
+    incrementDailyCount,
     getAUserFromDiscordID,
     getPickedCardsNumberOfAUser,
     getOwnedCardsNumberOfAUser,
@@ -969,6 +1058,12 @@ module.exports = {
     getPlayerDataFromID,
     getGuildPlayersList,
     getRandomPickablePlayerID,
+    findPlayerData,
+    createDrop,
+    getDrop,
+    getDropClaims,
+    claimDropSlot,
+    releaseDropClaim,
     prepareQuestUser,
     getQuestUserStats,
     updateQuestUserStats,

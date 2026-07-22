@@ -15,11 +15,12 @@ module.exports = {
 		await apiDB.prepareUser(interaction.user.id, interaction.user.username)
 		let tryDaily = await pickFunctions.tryDaily(interaction.user)
 		if(tryDaily.picked){
+			await apiDB.incrementDailyCount(interaction.user.id)
 			await questCore.trackEvent(interaction.user.id, "daily_claimed")
-			await interaction.editReply({ embeds: tryDaily.embeds});
+			await interaction.editReply(await pickFunctions.getBalanceReply(interaction.user, tryDaily.balanceChange, "Récompense quotidienne"));
 		}
 		else{
-			await interaction.editReply(`Vous avez déjà effectué votre </daily:1527045655892328596> aujourd'hui!`)
+			await interaction.editReply(`Vous avez déjà effectué votre </:1528720102156140603:> aujourd'hui!`)
 		}
 	},
 };

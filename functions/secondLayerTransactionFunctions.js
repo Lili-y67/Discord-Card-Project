@@ -35,6 +35,8 @@ const getBalanceModificationEmbed = (user, amount) => {
 		inline:true
 	},
 	)
+    const avatarURL = user?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true })
+    if(avatarURL) cardEmbed.setThumbnail(avatarURL)
     
     return cardEmbed
 }

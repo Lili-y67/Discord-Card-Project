@@ -34,7 +34,7 @@ const DISCORD_AVATAR_SIZE = 360;
 const BLURRED_BACKGROUND_WIDTH = 48;
 const BLURRED_BACKGROUND_HEIGHT = 56;
 
-const getCardEmbed = async (clientBot, cardID) => {
+const getCardEmbed = async (clientBot, cardID, requestedByUser = null) => {
     let card = await apiDB.getACardFromID(cardID)
 	if(!card){
 		throw new Error(`Carte ${cardID} introuvable.`)
@@ -44,8 +44,8 @@ const getCardEmbed = async (clientBot, cardID) => {
 	const playerID = card.playerID ?? "?"
 	const playerMention = getPlayerMention(card)
 
-	let creatorUser = card.creatorID == "" ? "Aucun" : clientBot.users.fetch(card.creatorID)
-	let ownerUser = card.ownerID == "" ? "Aucun" : clientBot.users.fetch(card.ownerID)
+	const creatorUser = await getUserDisplay(clientBot, card.creatorID)
+	const ownerUser = await getUserDisplay(clientBot, card.ownerID)
 
 	let cardEmbed = new EmbedBuilder()
 	.setColor(card.embedColor)
@@ -64,12 +64,12 @@ const getCardEmbed = async (clientBot, cardID) => {
 	},
 	{
 		name: "Créateur :",
-		value: ` ${await creatorUser}`,
+		value: creatorUser,
 		inline: true
 	},
 	{
 		name: "Possesseur :",
-		value: ` ${await ownerUser}`,
+		value: ownerUser,
 		inline: true
 	},
 	{
@@ -81,6 +81,8 @@ const getCardEmbed = async (clientBot, cardID) => {
     .setTimestamp()
     .setFooter({ text: `Carte créée le ${new Date(card.creationStamp).toLocaleDateString("fr-FR")}`});
 
+    const requesterAvatar = requestedByUser?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true })
+    if(requesterAvatar) cardEmbed.setThumbnail(requesterAvatar)
     return cardEmbed
 }
 
@@ -141,14 +143,32 @@ const getCardContainer = async (clientBot, card, requestedByUser = null) => {
 
 const getUserDisplay = async (clientBot, userID) => {
 	if(!userID) return "Aucun"
-	const mention = mentionSafety.getUserMention(userID)
-	if(mention) return mention
+	const safeUserID = userID.toString()
+	if(!/^\d{17,20}$/.test(safeUserID)) return mentionSafety.getDisplayName(safeUserID, "Aucun")
 
 	try {
-		const user = await clientBot.users.fetch(userID)
-		return mentionSafety.getDisplayName(user.username, userID)
+		const guildID = apiDB.getCurrentGuildID() || clientBot.mainGuildID
+		const guild = guildID ? await clientBot.guilds.fetch(guildID) : null
+		const member = guild ? await guild.members.fetch(safeUserID) : null
+		if(member){
+			return `${mentionSafety.escapeMarkdown(member.displayName || member.user.username)} (<@${safeUserID}>)`
+		}
 	} catch(error) {
-		return mentionSafety.getDisplayName(userID, "Aucun")
+		// Le membre peut avoir quitté le serveur : on tente alors le compte Discord global.
+	}
+
+	try {
+		const user = await clientBot.users.fetch(safeUserID, { force: true })
+		const name = user.globalName || user.username
+		return `${mentionSafety.escapeMarkdown(name)} (\`${safeUserID}\`)`
+	} catch(error) {
+		try {
+			const storedUser = await apiDB.getAUserFromDiscordID(safeUserID)
+			if(storedUser?.name) return `${mentionSafety.escapeMarkdown(storedUser.name)} (\`${safeUserID}\`)`
+		} catch(databaseError) {
+			// La base peut ne plus contenir ce compte.
+		}
+		return `Utilisateur \`${safeUserID}\``
 	}
 }
 
@@ -175,13 +195,14 @@ const generateCardImage = async (clientBot, cardID) => {
 
 	const cardCanvas = Canvas.createCanvas(CARD_WIDTH, CARD_HEIGHT)
 	const ctx = cardCanvas.getContext('2d')
-	const avatarURL = await getPlayerAvatarURL(clientBot, card)
+	const member = await findPlayerMember(clientBot, card)
+	const avatarURL = await getPlayerAvatarURL(clientBot, card, member)
 	const avatar = await Canvas.loadImage(avatarURL)
 
 	drawBlurredAvatarBackground(ctx, avatar)
 	drawDiscordAvatar(ctx, avatar, card)
 	await drawCardFrame(ctx, card)
-	drawCardText(ctx, card, cardID)
+	drawCardText(ctx, card, cardID, getRenderablePlayerName(card, member))
 
 	return new AttachmentBuilder(cardCanvas.toBuffer('image/png'), { name: `card-${cardID}.png` })
 }
@@ -201,13 +222,14 @@ const generateCardPreviewImage = async (clientBot, playerData, rarityName) => {
 	}
 	const cardCanvas = Canvas.createCanvas(CARD_WIDTH, CARD_HEIGHT)
 	const ctx = cardCanvas.getContext('2d')
-	const avatarURL = await getPlayerAvatarURL(clientBot, previewCard)
+	const member = await findPlayerMember(clientBot, previewCard)
+	const avatarURL = await getPlayerAvatarURL(clientBot, previewCard, member)
 	const avatar = await Canvas.loadImage(avatarURL)
 
 	drawBlurredAvatarBackground(ctx, avatar)
 	drawDiscordAvatar(ctx, avatar, previewCard)
 	await drawCardFrame(ctx, previewCard)
-	drawCardText(ctx, previewCard, 'PREVIEW')
+	drawCardText(ctx, previewCard, 'PREVIEW', getRenderablePlayerName(previewCard, member))
 
 	const safeRarityName = rarity.name.replace(/[^a-z0-9_-]/gi, '-').toLowerCase()
 	return new AttachmentBuilder(cardCanvas.toBuffer('image/png'), { name: `preview-${playerData.playerID}-${safeRarityName}.png` })
@@ -278,8 +300,8 @@ const drawDiscordAvatar = (ctx, avatar, card) => {
 	ctx.stroke()
 }
 
-const drawCardText = (ctx, card, cardID) => {
-	const pseudo = getRenderablePlayerName(card).toUpperCase()
+const drawCardText = (ctx, card, cardID, playerName = getRenderablePlayerName(card)) => {
+	const pseudo = playerName.toLocaleUpperCase('fr-FR')
 	setCardFont(ctx, fitFontSize(ctx, pseudo, 50, 26, 560))
 	let x = 353 - ctx.measureText(pseudo).width / 2
 	ctx.fillStyle = getCardTextFillStyle(ctx, card, x, 130, ctx.measureText(pseudo).width)
@@ -319,13 +341,13 @@ const getRainbowGradient = (ctx, x, y, width) => {
 	return gradient
 }
 
-const getPlayerAvatarURL = async (clientBot, card) => {
+const getPlayerAvatarURL = async (clientBot, card, resolvedMember = null) => {
 	const emoteID = cardDisplay.getPlayerEmojiID(card)
 	if(emoteID){
 		return `https://cdn.discordapp.com/emojis/${emoteID}.png?size=512&quality=lossless`
 	}
 
-	const member = await findPlayerMember(clientBot, card)
+	const member = resolvedMember || await findPlayerMember(clientBot, card)
 	if(member){
 		return member.displayAvatarURL({ extension: 'png', size: 512, forceStatic: true })
 	}
@@ -342,9 +364,18 @@ const getPlayerMention = (card) => {
 	return /^\d{17,20}$/.test(discordID || '') ? `<@${discordID}>` : null
 }
 
-const getRenderablePlayerName = (card) => {
-	const playerName = getCardPlayerName(card).toString().normalize('NFKC')
-	const cleanedName = playerName.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()
+const getRenderablePlayerName = (card, member = null) => {
+	const liveDiscordName = member?.nickname
+		|| member?.user?.username
+		|| member?.user?.globalName
+	const sourceName = liveDiscordName || getCardPlayerName(card) || `JOUEUR ${card.playerID ?? '?'}`
+	const cleanedName = sourceName.toString()
+		.normalize('NFKC')
+		.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, '')
+		.replace(/\p{Extended_Pictographic}/gu, '')
+		.replace(/[^\p{L}\p{N} ._'-]/gu, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
 	return cleanedName || `JOUEUR ${card.playerID ?? '?'}`
 }
 
@@ -460,8 +491,10 @@ module.exports = {
 	DISCORD_AVATAR_SIZE,
     getCardEmbed,
 	getCardReply,
+	getCardContainer,
 	generateCardImage,
 	generateCardPreviewImage,
+	getRenderablePlayerName,
 	getCardImageStorageChannel,
 	updateCardImageURL
 };

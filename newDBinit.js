@@ -9,7 +9,7 @@ const DB = new sqlite3.Database(dbpath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
     if(err) return console.error("Erreur lors de l'ouverture de la base de données", err)
 })
 
-const createUserTB = 'CREATE TABLE IF NOT EXISTS "usersData"("discordID" TEXT NOT NULL UNIQUE, "name" TEXT, "money" INTEGER DEFAULT 0, "creationStamp" INTEGER, "lastQuickPick" TEXT, "lastDailyPick" TEXT, "wantNotifications" INTEGER, "notificationsChannel" TEXT, "gotNotificationYet" INTEGER, "rankID" INTEGER, "cardPoints" INTEGER, PRIMARY KEY("discordID"))'
+const createUserTB = 'CREATE TABLE IF NOT EXISTS "usersData"("discordID" TEXT NOT NULL UNIQUE, "name" TEXT, "money" INTEGER DEFAULT 0, "creationStamp" INTEGER, "lastQuickPick" TEXT, "lastDailyPick" TEXT, "wantNotifications" INTEGER, "notificationsChannel" TEXT, "gotNotificationYet" INTEGER, "rankID" INTEGER, "cardPoints" INTEGER, "dailyCount" INTEGER DEFAULT 0, PRIMARY KEY("discordID"))'
 
 const createCardsDataTB = `CREATE TABLE IF NOT EXISTS "cardsData" (
 	"cardID"	INTEGER NOT NULL UNIQUE,
@@ -92,6 +92,7 @@ DB.serialize(() => {
     DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "lastQuestMessageStamp" INTEGER DEFAULT 0`, () => {});
     DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "pickBoostUntil" INTEGER DEFAULT 0`, () => {});
     DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "pickBoostMultiplier" REAL DEFAULT 1`, () => {});
+    DB.run(`ALTER TABLE "usersData" ADD COLUMN "dailyCount" INTEGER DEFAULT 0`, () => {});
 
 	const playerDataInsert = DB.prepare('INSERT OR REPLACE INTO "playersData" (playerID, discordID, playerName, playerEmote) VALUES(?,?,?,?)');
 	for (const id of playerIDs) {

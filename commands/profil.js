@@ -3,6 +3,7 @@
 const apiDB = require("../functions/apiDB")
 
 const profileFunctions = require("../functions/secondLayerProfileFunctions")
+const componentLifecycle = require("../functions/componentLifecycle")
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -14,6 +15,9 @@ module.exports = {
         const userRequested = interaction.options.getUser("user", false) == null ? interaction.user : interaction.options.getUser("user", false)
         await apiDB.prepareUser(userRequested.id.toString(), userRequested.username)
         await apiDB.updateUserName(userRequested.id, userRequested.username)
-        await interaction.reply(await profileFunctions.getProfileReply(userRequested, interaction.user))
+        await interaction.deferReply()
+        const expiresAt = componentLifecycle.createExpiresAt()
+        await interaction.editReply(await profileFunctions.getProfileReply(userRequested, interaction.user, expiresAt))
+        componentLifecycle.scheduleInteractionExpiration(interaction, "profil", expiresAt)
     },
 };

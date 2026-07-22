@@ -1,4 +1,4 @@
-const COMPONENT_LIFETIME_MS = 120000;
+﻿const COMPONENT_LIFETIME_MS = 120000;
 const DELETE_EXPIRED_MESSAGE_DELAY_MS = 60000;
 const mentionSafety = require("./mentionSafety");
 
@@ -55,6 +55,10 @@ const expireComponents = (components, commandName, commandID) => {
     return appendExpiredNotice(disableComponents(components), commandName, commandID);
 }
 
+const componentsContainToken = (components, token) => {
+    return JSON.stringify(components || []).includes(String(token));
+}
+
 const scheduleExpiredMessageDeletion = (interaction) => {
     setTimeout(async () => {
         try {
@@ -77,6 +81,7 @@ const scheduleInteractionExpiration = (interaction, commandName, expiresAt) => {
     setTimeout(async () => {
         try {
             const reply = await interaction.fetchReply();
+            if(!componentsContainToken(reply.components, expiresAt)) return;
             await interaction.editReply({
                 components: expireComponents(reply.components, commandName, interaction.commandId),
                 allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
@@ -104,5 +109,6 @@ module.exports = {
     scheduleInteractionExpiration,
     expireInteractedMessage,
     expireComponents,
-    scheduleExpiredMessageDeletion
+    scheduleExpiredMessageDeletion,
+    componentsContainToken
 };

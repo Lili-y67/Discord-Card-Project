@@ -14,7 +14,10 @@ const inventoryFunctions = require('./functions/secondLayerInventoryFunctions');
 const cardsListFunctions = require('./functions/secondLayerCardsListFunctions');
 const guildCollectionFunctions = require('./functions/secondLayerGuildCollectionFunctions');
 const topFunctions = require('./functions/secondLayerTopFunctions');
+const dropFunctions = require('./functions/secondLayerDropFunctions');
+const profileFunctions = require('./functions/secondLayerProfileFunctions');
 const collectionCardFunctions = require('./functions/secondLayerCollectionCardFunctions');
+const collectionFunctions = require('./functions/secondLayerCollectionFunctions');
 const apiDB = require("./functions/apiDB");
 const mentionSafety = require("./functions/mentionSafety");
 const questCore = require("./functions/questCore");
@@ -143,12 +146,21 @@ client.on('interactionCreate', async interaction => {
 	await apiDB.withGuild(interaction.guildId, async () => {
 
 	if(interaction.isModalSubmit()){
+		if(await client.commands.get("drop")?.handleDropModal?.(client, interaction)){
+			return;
+		}
 		if(await client.commands.get("config")?.handleConfigModal?.(client, interaction)){
 			return;
 		}
 	}
 
 	if(interaction.isButton()){
+		if(await profileFunctions.handleProfileButton(client, interaction)){
+			return;
+		}
+		if(await dropFunctions.handleDropButton(client, interaction)){
+			return;
+		}
 		if(await client.commands.get("config")?.handleConfigButton?.(client, interaction)){
 			return;
 		}
@@ -162,6 +174,9 @@ client.on('interactionCreate', async interaction => {
 			return;
 		}
 		if(await topFunctions.handleTopButton(client, interaction)){
+			return;
+		}
+		if(await collectionFunctions.handleCollectionButton(client, interaction)){
 			return;
 		}
 		if(await collectionCardFunctions.handleCollectionCardButton(client, interaction)){
@@ -185,6 +200,9 @@ client.on('interactionCreate', async interaction => {
 			return;
 		}
 		if(await guildCollectionFunctions.handleGuildCollectionSelect(client, interaction)){
+			return;
+		}
+		if(await collectionFunctions.handleCollectionSelect(client, interaction)){
 			return;
 		}
 	}

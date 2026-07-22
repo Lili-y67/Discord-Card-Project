@@ -13,13 +13,15 @@ module.exports = {
             .setRequired(true)
             .addChoices(
                 { name: "Argent", value: "money" },
-                { name: "Points", value: "points" }
+                { name: "Points", value: "points" },
+                { name: "Cartes possédées", value: "cards" },
+                { name: "Picks effectués", value: "picks" },
+                { name: "Dailies effectués", value: "dailies" }
             ))
-        .addIntegerOption(option => option.setName("page").setDescription("Page"))
         .setDMPermission(false),
     async execute(interaction) {
         const type = interaction.options.getString("type", true);
-        const page = interaction.options.getInteger("page", false) || 1;
+        const page = 1;
         const expiresAt = componentLifecycle.createExpiresAt();
         await interaction.reply(await topFunctions.getTopReply(interaction.user, type, page, expiresAt));
         componentLifecycle.scheduleInteractionExpiration(interaction, "top", expiresAt);

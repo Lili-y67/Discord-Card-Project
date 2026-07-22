@@ -1,6 +1,7 @@
-﻿const { EmbedBuilder } = require('discord.js');
+﻿
 
 const apiDB = require("./apiDB");
+const { ContainerBuilder, MessageFlags, SeparatorBuilder, ThumbnailBuilder } = require('discord.js');
 const constants = require("../data/constants.js")
 
 const cardFunctions = require("../functions/secondLayerCardFunctions")
@@ -27,7 +28,7 @@ const tryQuickPick = async (client, user) => {
         if(quickPickRes.error) return {picked:false, error:quickPickRes.error}
         await apiDB.updateQuickPickTime(discordID)
         await transactionFunctions.giveMoney(discordID, quickPickRes.givenMoney)
-        return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID), transactionFunctions.getBalanceModificationEmbed(user, quickPickRes.givenMoney)]}
+        return {picked:true, cardID: quickPickRes.pickedCardID, balanceChange: quickPickRes.givenMoney}
 
     }
     else{
@@ -43,7 +44,7 @@ const makeForcePick = async (client, user) => {
     let quickPickRes = await tryPickOperation(() => quickPick(client, user.id))
     if(quickPickRes.error) return {picked:false, error:quickPickRes.error}
     await transactionFunctions.giveMoney(user.id, quickPickRes.givenMoney)
-    return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID), transactionFunctions.getBalanceModificationEmbed(user, quickPickRes.givenMoney)]}
+    return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID, user), transactionFunctions.getBalanceModificationEmbed(user, quickPickRes.givenMoney)]}
 }
 
 const makeBuyPick = async (client, user) => {
@@ -59,7 +60,7 @@ const makeBuyPick = async (client, user) => {
     let cardID = pickResult.newCardID
     await transactionFunctions.subMoney(discordID, constants.BUYPICKPRICE)
 
-    return {embeds:[await cardFunctions.getCardEmbed(client, cardID), transactionFunctions.getBalanceModificationEmbed(user, -constants.BUYPICKPRICE)]}
+    return {cardID, balanceChange: -constants.BUYPICKPRICE}
 }
 
 const makePickFor = async (client, discordID) => {
@@ -71,7 +72,27 @@ const makePickFor = async (client, discordID) => {
     let quickPickRes = await tryPickOperation(() => quickPick(client, discordID))
     if(quickPickRes.error) return {picked:false, error:quickPickRes.error}
     await transactionFunctions.giveMoney(discordID, quickPickRes.givenMoney)
-    return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID), transactionFunctions.getBalanceModificationEmbed(await client.users.fetch(discordID), quickPickRes.givenMoney)]}
+    const requestedUser = await client.users.fetch(discordID)
+    return {picked:true, embeds: [await cardFunctions.getCardEmbed(client, quickPickRes.pickedCardID, requestedUser), transactionFunctions.getBalanceModificationEmbed(requestedUser, quickPickRes.givenMoney)]}
+}
+
+const makeDropCards = async (client, user, playerID, rarityName, copies = 1) => {
+    const rarity = constants.RARITIES.find(entry => entry.name === rarityName)
+    if(!rarity) throw new Error("Rareté invalide.")
+    const storageChannel = await cardFunctions.getCardImageStorageChannel(client)
+    const cardIDs = []
+    for(let index = 0; index < copies; index++){
+        const rarityValue = Math.floor(Math.random() * (rarity.maxValue - rarity.minValue + 1)) + rarity.minValue
+        const cardID = await apiDB.createACard(playerID, rarity.name, rarityValue, user.id)
+        await apiDB.changeCardOwnership(cardID, user.id)
+        try {
+            await cardFunctions.updateCardImageURL(client, cardID, storageChannel)
+        } catch(error) {
+            console.error(`Image du drop introuvable pour la carte ${cardID}: ${error.message}`)
+        }
+        cardIDs.push(cardID)
+    }
+    return cardIDs
 }
 
 
@@ -105,6 +126,7 @@ const getNextQuickPickTimestamp = async (client, userDB) => {
     const questPickMultiplier = await questCore.getPickCooldownMultiplier(userDB.discordID)
     const rankBaseTimer = constants.RANKIDTORANKQUICKPICKTIMEDICO[1] * client.quickPickTimeMultiplicator
     const configuredBaseTimer = await apiDB.getPersistentSetting(PICK_BASE_TIMER_SETTING, rankBaseTimer)
+    if(Number(configuredBaseTimer) === 0) return 0
     const rankTimerRatio = (constants.RANKIDTORANKQUICKPICKTIMEDICO[userDB.rankID] || constants.RANKIDTORANKQUICKPICKTIMEDICO[1]) / constants.RANKIDTORANKQUICKPICKTIMEDICO[1]
     return parseInt(userDB.lastQuickPick) + Math.trunc(configuredBaseTimer * rankTimerRatio * questPickMultiplier)
 }
@@ -187,7 +209,7 @@ const tryDaily = async (user) => {
 
         await apiDB.updateSlowPickTime(discordID)
         let givenMoney = await daily(discordID)
-        return {picked:true, embeds: [transactionFunctions.getBalanceModificationEmbed(user, givenMoney)]}
+        return {picked:true, balanceChange: givenMoney}
 
     }
     else{
@@ -229,13 +251,46 @@ const dailyGivenValue = (randomNumber) => {
 }
 
 
-const getNotEnoughMoneyToBuyPickEmbed = (user) => {
-    return new EmbedBuilder()
-    .setColor('#D72306')
-    .setTitle(`Erreur lors de l'achat du buypick`)
-        .addFields({ name: "L'achat du buypick n'a pas pu être effectué", value: `Vous n'avez pas assez d'argent (prix : ${constants.BUYPICKPRICE.toString()}$)` })
-    .setTimestamp()
-    .setFooter({ text: `Fun fact : vous n'avez pas assez d'argent !`});
+const getNotEnoughMoneyToBuyPickReply = (user, currentMoney = 0) => {
+    const balance = Number(currentMoney) || 0
+    const missingMoney = Math.max(constants.BUYPICKPRICE - balance, 0)
+    const container = new ContainerBuilder().setAccentColor(0xD72306)
+        .addTextDisplayComponents(text => text.setContent("## Achat impossible"))
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addTextDisplayComponents(text => text.setContent([
+            `Le buypick coûte **${constants.BUYPICKPRICE}$**.`,
+            `💰 Votre solde : **${balance}$**`,
+            `Il vous manque **${missingMoney}$**.`
+        ].join("\n")))
+    const avatarURL = user?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true })
+    if(avatarURL) container.addSectionComponents(section => section
+        .addTextDisplayComponents(text => text.setContent(`-# Solde de ${user.username}`))
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(avatarURL)))
+    return { components: [container], flags: MessageFlags.IsComponentsV2 }
+}
+
+const getPickReply = async (client, user, cardID, balanceChange) => {
+    const card = await apiDB.getACardFromID(cardID)
+    const container = await cardFunctions.getCardContainer(client, card, user)
+    const balance = await apiDB.getMoneyOfUser(user.id)
+    const sign = balanceChange >= 0 ? "+" : ""
+    container.addSeparatorComponents(new SeparatorBuilder())
+        .addTextDisplayComponents(text => text.setContent(
+            `### Portefeuille\nVariation : **${sign}${balanceChange}$**\n💰 Solde total : **${balance}$**`
+        ))
+    return { components: [container], flags: MessageFlags.IsComponentsV2 }
+}
+
+const getBalanceReply = async (user, balanceChange, title = "Solde modifié") => {
+    const balance = await apiDB.getMoneyOfUser(user.id)
+    const sign = balanceChange >= 0 ? "+" : ""
+    const container = new ContainerBuilder().setAccentColor(0xFC6600)
+        .addTextDisplayComponents(text => text.setContent(`## ${title}`))
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addTextDisplayComponents(text => text.setContent(
+            `Variation : **${sign}${balanceChange}$**\n💰 Solde total : **${balance}$**`
+        ))
+    return { components: [container], flags: MessageFlags.IsComponentsV2 }
 }
 
 
@@ -277,7 +332,10 @@ module.exports = {
     makeForcePick,
     makeBuyPick,
     makePickFor,
-    getNotEnoughMoneyToBuyPickEmbed,
+    makeDropCards,
+    getNotEnoughMoneyToBuyPickReply,
+    getPickReply,
+    getBalanceReply,
     tryDaily,
     getRarityFromRarityValue
 };

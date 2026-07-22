@@ -28,10 +28,32 @@ const TOP_TYPES = Object.freeze({
         unit: "pts",
         valueKey: "cardPoints",
         getRows: apiDB.getCardPointstopRowsList
+    },
+    cards: {
+        label: "Cartes possédées",
+        title: "Classement des collectionneurs",
+        unit: "cartes",
+        valueKey: "ownedCards",
+        getRows: apiDB.getOwnedCardTopRowsList
+    },
+    picks: {
+        label: "Picks effectués",
+        title: "Classement des picks",
+        unit: "picks",
+        valueKey: "pickCount",
+        getRows: apiDB.getPickTopRowsList
+    },
+    dailies: {
+        label: "Dailies effectués",
+        title: "Classement des dailies",
+        unit: "dailies",
+        valueKey: "dailyCount",
+        getRows: apiDB.getDailyTopRowsList
     }
 });
 
 const getTopReply = async (user, type = "money", page = 1, expiresAt = componentLifecycle.createExpiresAt()) => {
+    await apiDB.ensureDatabaseSchema();
     const topType = normalizeType(type);
     const rows = await TOP_TYPES[topType].getRows();
     const totalPages = getTotalPages(rows.length);
@@ -120,7 +142,9 @@ const handleTopButton = async (client, interaction) => {
 
     if(parsedInteraction.action == "page"){
         const user = await client.users.fetch(parsedInteraction.userID);
-        await interaction.update(await getTopReply(user, parsedInteraction.type, parsedInteraction.page, parsedInteraction.expiresAt));
+        const expiresAt = componentLifecycle.createExpiresAt();
+        await interaction.update(await getTopReply(user, parsedInteraction.type, parsedInteraction.page, expiresAt));
+        componentLifecycle.scheduleInteractionExpiration(interaction, "top", expiresAt);
         return true;
     }
 

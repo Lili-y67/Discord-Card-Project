@@ -1,6 +1,7 @@
 ﻿const { SlashCommandBuilder } = require('discord.js');
 
 const apiDB = require("../functions/apiDB")
+const componentLifecycle = require("../functions/componentLifecycle")
 
 const collectionFunctions = require("../functions/secondLayerCollectionFunctions")
 
@@ -16,6 +17,9 @@ module.exports = {
 
         let userCollection = await collectionFunctions.getCollectionOfAUser(userRequested.id)
 
-        await interaction.reply(await collectionFunctions.getCollectionReply(interaction.client, interaction, userCollection, 1, userRequested))
+        const expiresAt = componentLifecycle.createExpiresAt();
+        await interaction.reply(await collectionFunctions.getCollectionReply(interaction.client, interaction, userCollection, 1, userRequested, expiresAt))
+        componentLifecycle.scheduleInteractionExpiration(interaction, "collection", expiresAt);
     },
 };
+

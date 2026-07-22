@@ -12,7 +12,7 @@ const syncGuildMember = (member) => enqueueSync(async () => apiDB.withGuild(memb
     if(member.user.bot) return { added: 0, updated: 0 };
 
     await apiDB.ensureDatabaseSchema();
-    const playerName = member.displayName || member.user.username;
+    const playerName = member.nickname || member.user.username || member.user.globalName;
     const result = await apiDB.upsertGuildPlayer(member.id, playerName);
     await apiDB.refreshLastPickablePlayerID();
     return {
@@ -53,7 +53,7 @@ const syncGuildPlayers = (client, guildID = client.mainGuildID) => enqueueSync(a
             if(member.user.bot) continue;
             currentMemberIDs.add(member.id);
             total += 1;
-            const playerName = member.displayName || member.user.username;
+            const playerName = member.nickname || member.user.username || member.user.globalName;
             const result = await apiDB.upsertGuildPlayer(member.id, playerName);
             if(result.added) added += 1;
             if(result.updated) updated += 1;

@@ -18,11 +18,11 @@ module.exports = {
 		await interaction.deferReply();
 
 		await apiDB.prepareUser(interaction.user.id, interaction.user.username)
-
-        if(!await apiDB.hasEnoughMoney(interaction.user.id, constants.BUYPICKPRICE)){ //check si l'utilisateur a l'argent nécessaire
-            await interaction.editReply({embeds:[pickFunctions.getNotEnoughMoneyToBuyPickEmbed(interaction.user)]})
-            return;
-        }
+		const userDB = await apiDB.getAUserFromDiscordID(interaction.user.id)
+		if(!await apiDB.hasEnoughMoney(interaction.user.id, constants.BUYPICKPRICE)){
+			await interaction.editReply(pickFunctions.getNotEnoughMoneyToBuyPickReply(interaction.user, userDB?.money))
+			return;
+		}
 
 		let buyPick = await pickFunctions.makeBuyPick(interaction.client, interaction.user, interaction.user.id)
 		if(buyPick.error){
@@ -30,6 +30,6 @@ module.exports = {
 			return;
 		}
         await questCore.trackEvent(interaction.user.id, "card_picked")
-        await interaction.editReply({embeds:buyPick.embeds})
+        await interaction.editReply(await pickFunctions.getPickReply(interaction.client, interaction.user, buyPick.cardID, buyPick.balanceChange))
 	},
 };
