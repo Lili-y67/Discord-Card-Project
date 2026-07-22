@@ -6,8 +6,7 @@ const {
     MediaGalleryBuilder,
     MediaGalleryItemBuilder,
     MessageFlags,
-    SeparatorBuilder,
-    ThumbnailBuilder
+    SeparatorBuilder
 } = require('discord.js');
 
 const apiDB = require("./apiDB");
@@ -34,20 +33,13 @@ const getCollectionCardReply = async (client, ownerUser, targetUser, page = 1, e
 
 const getCollectionCardContainer = (ownerUser, targetUser, targetPlayer, cards, currentPage, totalPages, expiresAt) => {
     const pageCards = cards.slice(CARDS_PER_PAGE * (currentPage - 1), CARDS_PER_PAGE * currentPage);
-    const thumbnailURL = ownerUser?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true });
     const ownerDisplay = mentionSafety.getUserMention(ownerUser.id) || mentionSafety.getDisplayName(ownerUser.username);
     const targetDisplay = mentionSafety.getUserMention(targetUser.id) || mentionSafety.getDisplayName(targetUser.username);
     const container = new ContainerBuilder()
         .setAccentColor(COLLECTION_CARD_ACCENT_COLOR)
-        .addSectionComponents(section => {
-            section.addTextDisplayComponents(text =>
-                text.setContent(`## Collection card\n${ownerDisplay} possede **${cards.length}** carte(s) de ${targetDisplay}`)
-            );
-            if(thumbnailURL){
-                section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailURL));
-            }
-            return section;
-        })
+        .addTextDisplayComponents(text =>
+            text.setContent(`## Collection card\n${ownerDisplay} possede **${cards.length}** carte(s) de ${targetDisplay}`)
+        )
         .addSeparatorComponents(new SeparatorBuilder());
 
     if(!targetPlayer){

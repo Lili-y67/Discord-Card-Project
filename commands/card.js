@@ -1,32 +1,14 @@
-﻿const { SlashCommandBuilder } = require('discord.js');
-
-
-const apiDB = require("../functions/apiDB")
-const cardFunctions = require("../functions/secondLayerCardFunctions")
+const { SlashCommandBuilder } = require("discord.js");
+const apiDB = require("../functions/apiDB");
+const picker = require("../functions/cardActionPicker");
+const componentLifecycle = require("../functions/componentLifecycle");
 
 module.exports = {
-	data: new SlashCommandBuilder()
-		.setName('card')
-		.setDescription("Voir les informations d'une carte")
-		.addIntegerOption(option => option.setName("cardid").setDescription("Card ID").setRequired(true))
-		.setDMPermission(false),
-	async execute(interaction) {
-
-		await interaction.deferReply();
-
-		if(interaction.options.getInteger("cardid", false) == null){
-			await interaction.editReply(`Erreur dans les options de la commande`)
-			return;
-		}
-
-		let cardID = interaction.options.getInteger("cardid", true)
-
-		if(await apiDB.isCardRegistered(cardID)){
-
-			await interaction.editReply(await cardFunctions.getCardReply(interaction.client, cardID, interaction.user))
-		}
-		else{
-			await interaction.editReply(`La carte numéro ${cardID} n'existe pas`)
-		}
-	},
+    data: new SlashCommandBuilder().setName("card").setDescription("Voir les informations d’une carte").setDMPermission(false),
+    async execute(interaction) {
+        await apiDB.prepareUser(interaction.user.id, interaction.user.username);
+        const expiresAt = componentLifecycle.createExpiresAt();
+        await interaction.reply(await picker.getPickerReply(interaction.user, "card", 1, 0, expiresAt));
+        componentLifecycle.scheduleInteractionExpiration(interaction, "card", expiresAt);
+    }
 };

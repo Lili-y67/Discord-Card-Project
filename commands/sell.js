@@ -1,43 +1,14 @@
-﻿const { SlashCommandBuilder } = require('discord.js');
-
-const apiDB = require("../functions/apiDB")
-const cardFunctions = require("../functions/secondLayerCardFunctions")
-const sellFunctions = require("../functions/secondLayerSellFunctions");
+const { SlashCommandBuilder } = require("discord.js");
+const apiDB = require("../functions/apiDB");
+const picker = require("../functions/cardActionPicker");
+const componentLifecycle = require("../functions/componentLifecycle");
 
 module.exports = {
-	data: new SlashCommandBuilder()
-		.setName('sell')
-		.setDescription("Vendre une carte à la banque")
-        .addIntegerOption(option => option.setName("cardid").setDescription("Card ID").setRequired(true))
-		.setDMPermission(false),
-	async execute(interaction) {
-        await interaction.deferReply();
-		if(interaction.options.getInteger("cardid", false) == null){
-			await interaction.editReply(`Erreur dans les options de la commande`)
-			return;
-		}
-        let cardID = interaction.options.getInteger("cardid", true)
-		await apiDB.prepareUser(interaction.user.id, interaction.user.username)
-        if(await apiDB.isCardRegistered(cardID)){
-            if(await apiDB.doesUserOwnThisCard(cardID, interaction.user.id)){
-				if(!await apiDB.isACardLocked(cardID)){
-					await apiDB.lockACard(cardID)
-					let cardEmbed = await cardFunctions.getCardEmbed(interaction.client, cardID)
-					let sellEmbed = await sellFunctions.getConfirmationSellEmbed(cardID)
-					let buttonsRow = await sellFunctions.getSellConfirmationButtons(interaction.client, interaction, cardID)
-
-					interaction.editReply({ embeds: [cardEmbed, sellEmbed], components: [buttonsRow]})
-				}
-				else{
-					interaction.editReply('Cette carte est actuellement lock!')
-				}
-            }
-            else{
-                interaction.editReply('Vous ne possédez même pas la carte, bouffinos !')
-            }
-		}
-		else{
-			interaction.editReply(`La carte numéro ${cardID} n'existe pas`)
-		}
-	},
+    data: new SlashCommandBuilder().setName("sell").setDescription("Vendre une carte à la banque").setDMPermission(false),
+    async execute(interaction) {
+        await apiDB.prepareUser(interaction.user.id, interaction.user.username);
+        const expiresAt = componentLifecycle.createExpiresAt();
+        await interaction.reply(await picker.getPickerReply(interaction.user, "sell", 1, 0, expiresAt));
+        componentLifecycle.scheduleInteractionExpiration(interaction, "sell", expiresAt);
+    }
 };

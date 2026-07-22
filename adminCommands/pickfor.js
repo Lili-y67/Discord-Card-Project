@@ -9,13 +9,14 @@ module.exports = {  //effectue un pick pour un utilisateur; n'intéragis JAMAIS 
     data: new SlashCommandBuilder()
         .setName("pickfor")
         .setDescription("pick une carte pour un utilisateur")
-        .addStringOption(option => option.setName("discordid").setDescription("L'id discord de l'utilisateur").setRequired(true)),
+        .addUserOption(option => option.setName("user").setDescription("Utilisateur ciblé").setRequired(true)),
     async execute(interaction) {
         await interaction.deferReply();
 
-        let requestedUserID = interaction.options.getString("discordid")
+        const requestedUser = interaction.options.getUser("user", true)
+        let requestedUserID = requestedUser.id
 
-        await apiDB.prepareUser(requestedUserID)
+        await apiDB.prepareUser(requestedUserID, requestedUser.username)
 
         let pickForRes = await pickFunctions.makePickFor(interaction.client, requestedUserID)
         if(pickForRes.error){

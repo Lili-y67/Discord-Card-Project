@@ -1,12 +1,17 @@
 const Canvas = require("canvas");
-const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags, SeparatorBuilder } = require("discord.js");
+const fs = require("node:fs");
+const path = require("node:path");
+const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, FileUploadBuilder, LabelBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags, ModalBuilder, SeparatorBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require("discord.js");
 const apiDB = require("./apiDB");
 const constants = require("../data/constants");
 const mentionSafety = require("./mentionSafety");
 const componentLifecycle = require("./componentLifecycle");
 
-const BACKGROUNDS = ["black", "navy", "purple", "forest"];
+const BACKGROUNDS = ["black", "navy", "purple", "forest", "custom"];
 const SETTING_PREFIX = "profileBackground:";
+const CUSTOM_BACKGROUND_SETTING_PREFIX = "profileBackgroundPath:";
+const MAX_BACKGROUND_BYTES = 2 * 1024 * 1024;
+const BACKGROUNDS_DIRECTORY = path.join(__dirname, "../data/profile-backgrounds");
 
 const getProfileReply = async (profileUser, requestedByUser, expiresAt = componentLifecycle.createExpiresAt()) => {
     const userDB = await apiDB.getAUserFromDiscordID(profileUser.id);
@@ -32,14 +37,17 @@ const getProfileReply = async (profileUser, requestedByUser, expiresAt = compone
                 .setStyle(ButtonStyle.Secondary).setEmoji("🎨").setLabel("Changer le fond").setDisabled(!ownProfile)
         ));
     return mentionSafety.withSafeMentions({
-        components: [container], files: [new AttachmentBuilder(image, { name: fileName })], flags: MessageFlags.IsComponentsV2
+        components: [container],
+        attachments: [],
+        files: [new AttachmentBuilder(image, { name: fileName })],
+        flags: MessageFlags.IsComponentsV2
     });
 };
 
 const generateProfileImage = async (user, data, background) => {
     const canvas = Canvas.createCanvas(1100, 460);
     const ctx = canvas.getContext("2d");
-    drawBackground(ctx, canvas.width, canvas.height, background);
+    await drawBackground(ctx, canvas.width, canvas.height, background, user.id);
     ctx.globalAlpha = 0.12; ctx.fillStyle = "#ffffff";
     ctx.beginPath(); ctx.arc(1060, -30, 260, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(980, 550, 210, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
@@ -62,10 +70,29 @@ const generateProfileImage = async (user, data, background) => {
     return canvas.toBuffer("image/png");
 };
 
-const drawBackground = (ctx, width, height, background) => {
+const drawBackground = async (ctx, width, height, background, userID) => {
+    if(background === "custom"){
+        const customPath = await apiDB.getPersistentTextSetting(`${CUSTOM_BACKGROUND_SETTING_PREFIX}${userID}`, "");
+        if(customPath && fs.existsSync(customPath)){
+            try {
+                const image = await Canvas.loadImage(customPath);
+                drawImageCover(ctx, image, 0, 0, width, height);
+                ctx.fillStyle = "rgba(0, 0, 0, 0.30)";
+                ctx.fillRect(0, 0, width, height);
+                return;
+            } catch(error) {
+                console.error(`Fond personnalisé illisible pour ${userID}: ${error.message}`);
+            }
+        }
+    }
     const colors = ({ black: ["#090909", "#242424"], navy: ["#07162f", "#123b68"], purple: ["#190d2d", "#63358b"], forest: ["#071f18", "#1f5943"] })[background] || ["#090909", "#242424"];
     const gradient = ctx.createLinearGradient(0, 0, width, height); gradient.addColorStop(0, colors[0]); gradient.addColorStop(1, colors[1]);
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, width, height);
+};
+const drawImageCover = (ctx, image, x, y, width, height) => {
+    const scale = Math.max(width / image.width, height / image.height);
+    const drawWidth = image.width * scale, drawHeight = image.height * scale;
+    ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
 };
 const drawStat = (ctx, x, y, label, value, color) => {
     ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.beginPath(); ctx.roundRect(x, y, 300, 120, 20); ctx.fill();
@@ -90,13 +117,108 @@ const handleProfileButton = async (client, interaction) => {
     if(interaction.user.id !== profileID || interaction.user.id !== requesterID){
         await interaction.reply({ content: "Seul le propriétaire peut changer ce fond.", flags: MessageFlags.Ephemeral }); return true;
     }
-    const next = BACKGROUNDS[(BACKGROUNDS.indexOf(background) + 1) % BACKGROUNDS.length];
-    await apiDB.setPersistentTextSetting(`${SETTING_PREFIX}${profileID}`, next);
-    const user = await client.users.fetch(profileID); const newExpiresAt = componentLifecycle.createExpiresAt();
+    await interaction.showModal(getBackgroundModal(profileID, requesterID, background, expiresAt));
+    return true;
+};
+
+const handleProfileModal = async (client, interaction) => {
+    const parts = interaction.customId.split(":");
+    if(parts.length !== 5 || parts[0] !== "profile" || parts[1] !== "bgmodal") return false;
+    const profileID = parts[2], requesterID = parts[3], expiresAt = Number(parts[4]);
+    if(componentLifecycle.isExpired(expiresAt)){
+        await interaction.reply({ content: "Ce panneau de profil a expiré. Relance `/profil`.", flags: MessageFlags.Ephemeral });
+        return true;
+    }
+    if(interaction.user.id !== profileID || interaction.user.id !== requesterID){
+        await interaction.reply({ content: "Seul le propriétaire peut changer ce fond.", flags: MessageFlags.Ephemeral });
+        return true;
+    }
+
+    let selectedBackground = interaction.fields.getStringSelectValues("profile_theme")[0] || "black";
+    const uploadedFiles = interaction.fields.getUploadedFiles("profile_image", false);
+    const upload = uploadedFiles?.first();
+    if(upload){
+        const validationError = validateBackgroundUpload(upload);
+        if(validationError){
+            await interaction.reply({ content: validationError, flags: MessageFlags.Ephemeral });
+            return true;
+        }
+        try {
+            const savedPath = await saveCustomBackground(upload, profileID);
+            await apiDB.setPersistentTextSetting(`${CUSTOM_BACKGROUND_SETTING_PREFIX}${profileID}`, savedPath);
+            selectedBackground = "custom";
+        } catch(error) {
+            await interaction.reply({ content: `Image refusée : ${error.message}`, flags: MessageFlags.Ephemeral });
+            return true;
+        }
+    } else if(selectedBackground === "custom"){
+        const currentPath = await apiDB.getPersistentTextSetting(`${CUSTOM_BACKGROUND_SETTING_PREFIX}${profileID}`, "");
+        if(!currentPath || !fs.existsSync(currentPath)){
+            await interaction.reply({ content: "Ajoute d’abord une image personnalisée dans le formulaire.", flags: MessageFlags.Ephemeral });
+            return true;
+        }
+    }
+
+    await apiDB.setPersistentTextSetting(`${SETTING_PREFIX}${profileID}`, selectedBackground);
+    const user = await client.users.fetch(profileID, { force: true });
+    const newExpiresAt = componentLifecycle.createExpiresAt();
     await interaction.update(await getProfileReply(user, user, newExpiresAt));
-    componentLifecycle.scheduleInteractionExpiration(interaction, "profil", newExpiresAt); return true;
+    componentLifecycle.scheduleInteractionExpiration(interaction, "profil", newExpiresAt);
+    return true;
+};
+
+const getBackgroundModal = (profileID, requesterID, currentBackground, expiresAt) => new ModalBuilder()
+    .setCustomId(`profile:bgmodal:${profileID}:${requesterID}:${expiresAt}`)
+    .setTitle("Personnaliser le fond")
+    .addLabelComponents(
+        new LabelBuilder()
+            .setLabel("Thème couleur")
+            .setDescription("Utilisé si aucune nouvelle image n’est envoyée")
+            .setStringSelectMenuComponent(new StringSelectMenuBuilder()
+                .setCustomId("profile_theme")
+                .setMinValues(1).setMaxValues(1)
+                .addOptions(
+                    themeOption("Noir", "black", currentBackground),
+                    themeOption("Bleu nuit", "navy", currentBackground),
+                    themeOption("Violet", "purple", currentBackground),
+                    themeOption("Forêt", "forest", currentBackground),
+                    themeOption("Image personnalisée actuelle", "custom", currentBackground)
+                )),
+        new LabelBuilder()
+            .setLabel("Image personnalisée — 2 Mo maximum")
+            .setDescription("PNG, JPEG, WebP ou GIF ; une nouvelle image remplace l’ancienne")
+            .setFileUploadComponent(new FileUploadBuilder()
+                .setCustomId("profile_image").setMinValues(0).setMaxValues(1).setRequired(false))
+    );
+
+const themeOption = (label, value, current) => new StringSelectMenuOptionBuilder()
+    .setLabel(label).setValue(value).setDefault(value === current);
+
+const validateBackgroundUpload = upload => {
+    if(Number(upload.size) > MAX_BACKGROUND_BYTES) return "L’image dépasse la limite de **2 Mo**.";
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+    if(!allowedTypes.has(upload.contentType)) return "Format invalide : utilise une image PNG, JPEG, WebP ou GIF.";
+    return null;
+};
+
+const saveCustomBackground = async (upload, profileID) => {
+    const response = await fetch(upload.url);
+    if(!response.ok) throw new Error("le téléchargement Discord a échoué");
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if(buffer.length > MAX_BACKGROUND_BYTES) throw new Error("le fichier dépasse 2 Mo");
+    const image = await Canvas.loadImage(buffer);
+    if(image.width < 200 || image.height < 100) throw new Error("dimensions trop petites (minimum 200 × 100)");
+    if(image.width * image.height > 40000000) throw new Error("dimensions trop grandes");
+    const normalized = Canvas.createCanvas(1100, 460);
+    drawImageCover(normalized.getContext("2d"), image, 0, 0, 1100, 460);
+    const guildID = apiDB.getCurrentGuildID() || "global";
+    const directory = path.join(BACKGROUNDS_DIRECTORY, guildID.toString());
+    await fs.promises.mkdir(directory, { recursive: true });
+    const destination = path.join(directory, `${profileID}.jpg`);
+    await fs.promises.writeFile(destination, normalized.toBuffer("image/jpeg", { quality: 0.88 }));
+    return destination;
 };
 
 const getBackground = async id => { const value = await apiDB.getPersistentTextSetting(`${SETTING_PREFIX}${id}`, "black"); return BACKGROUNDS.includes(value) ? value : "black"; };
-const backgroundLabel = value => ({ black: "Noir", navy: "Bleu nuit", purple: "Violet", forest: "Forêt" }[value] || "Noir");
-module.exports = { getProfileReply, handleProfileButton, generateProfileImage };
+const backgroundLabel = value => ({ black: "Noir", navy: "Bleu nuit", purple: "Violet", forest: "Forêt", custom: "Image personnalisée" }[value] || "Noir");
+module.exports = { getProfileReply, handleProfileButton, handleProfileModal, generateProfileImage, getBackgroundModal, validateBackgroundUpload };

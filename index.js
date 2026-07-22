@@ -16,6 +16,8 @@ const guildCollectionFunctions = require('./functions/secondLayerGuildCollection
 const topFunctions = require('./functions/secondLayerTopFunctions');
 const dropFunctions = require('./functions/secondLayerDropFunctions');
 const profileFunctions = require('./functions/secondLayerProfileFunctions');
+const cardActionPicker = require('./functions/cardActionPicker');
+const tradeBuilderFunctions = require('./functions/tradeBuilderFunctions');
 const collectionCardFunctions = require('./functions/secondLayerCollectionCardFunctions');
 const collectionFunctions = require('./functions/secondLayerCollectionFunctions');
 const apiDB = require("./functions/apiDB");
@@ -146,6 +148,9 @@ client.on('interactionCreate', async interaction => {
 	await apiDB.withGuild(interaction.guildId, async () => {
 
 	if(interaction.isModalSubmit()){
+		if(await profileFunctions.handleProfileModal(client, interaction)){
+			return;
+		}
 		if(await client.commands.get("drop")?.handleDropModal?.(client, interaction)){
 			return;
 		}
@@ -155,6 +160,12 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	if(interaction.isButton()){
+		if(await tradeBuilderFunctions.handleButton(client, interaction)){
+			return;
+		}
+		if(await cardActionPicker.handleButton(client, interaction)){
+			return;
+		}
 		if(await profileFunctions.handleProfileButton(client, interaction)){
 			return;
 		}
@@ -190,6 +201,12 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	if(interaction.isStringSelectMenu()){
+		if(await tradeBuilderFunctions.handleSelect(client, interaction)){
+			return;
+		}
+		if(await cardActionPicker.handleSelect(client, interaction)){
+			return;
+		}
 		if(await client.commands.get("config")?.handleConfigSelect?.(client, interaction)){
 			return;
 		}

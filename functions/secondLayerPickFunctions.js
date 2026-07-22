@@ -1,7 +1,7 @@
 ﻿
 
 const apiDB = require("./apiDB");
-const { ContainerBuilder, MessageFlags, SeparatorBuilder, ThumbnailBuilder } = require('discord.js');
+const { ContainerBuilder, MessageFlags, SeparatorBuilder } = require('discord.js');
 const constants = require("../data/constants.js")
 
 const cardFunctions = require("../functions/secondLayerCardFunctions")
@@ -262,10 +262,6 @@ const getNotEnoughMoneyToBuyPickReply = (user, currentMoney = 0) => {
             `💰 Votre solde : **${balance}$**`,
             `Il vous manque **${missingMoney}$**.`
         ].join("\n")))
-    const avatarURL = user?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true })
-    if(avatarURL) container.addSectionComponents(section => section
-        .addTextDisplayComponents(text => text.setContent(`-# Solde de ${user.username}`))
-        .setThumbnailAccessory(new ThumbnailBuilder().setURL(avatarURL)))
     return { components: [container], flags: MessageFlags.IsComponentsV2 }
 }
 

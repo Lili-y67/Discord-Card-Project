@@ -103,7 +103,7 @@ const getCollectionNavigationRow = (ownerID, requestedUserID, currentPage, total
         new ButtonBuilder()
             .setCustomId(getCollectionCustomID("clear", ownerID, requestedUserID, currentPage, 0, expiresAt))
             .setStyle(ButtonStyle.Secondary)
-            .setLabel(`Page ${currentPage}/${totalPages}`)
+            .setLabel(selectedPlayerID ? "Réinitialiser" : `Page ${currentPage}/${totalPages}`)
             .setDisabled(!selectedPlayerID),
 
         new ButtonBuilder()
@@ -137,7 +137,7 @@ const handleCollectionButton = async (client, interaction) => {
     if(!(await canUseCollectionInteraction(interaction, parsedInteraction))) return true;
 
     const page = parsedInteraction.action == "page" ? parsedInteraction.page : parsedInteraction.page;
-    const selectedPlayerID = parsedInteraction.action == "clear" ? 0 : parsedInteraction.selectedPlayerID;
+    const selectedPlayerID = ["clear", "page"].includes(parsedInteraction.action) ? 0 : parsedInteraction.selectedPlayerID;
     await updateCollectionInteraction(client, interaction, parsedInteraction, page, selectedPlayerID);
     return true;
 }
@@ -217,10 +217,9 @@ const fillCardsCollection = (collection, distinctCardsList) => {
 
 const getEmptyCollection = async () => {
     let collection = {}
-    let lastPickablePlayerID = await apiDB.getLastPickablePlayerID()
-
-    for(let playerID = 1; playerID<lastPickablePlayerID+1; playerID++){
-        collection[playerID] = {}
+    const activePlayers = await apiDB.getGuildPlayersList()
+    for(const player of activePlayers){
+        collection[player.playerID] = {}
     }
 
     return collection
@@ -253,7 +252,8 @@ const getPlayerRarityStatusText = (playerCollection) => {
 }
 
 const getPlayerDisplay = (playerData) => {
-    return /^\d{17,20}$/.test(playerData?.discordID || "") ? `<@${playerData.discordID}>` : (playerData?.playerName || `Joueur ${playerData?.playerID ?? "?"}`)
+    const name = mentionSafety.escapeMarkdown(playerData?.playerName || `Joueur ${playerData?.playerID ?? "?"}`)
+    return /^\d{17,20}$/.test(playerData?.discordID || "") ? `**${name}** (\`${playerData.discordID}\`)` : `**${name}**`
 }
 
 const getPlayerOptionLabel = (playerData) => {

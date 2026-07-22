@@ -8,13 +8,14 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName("submoney")
         .setDescription("Enlever de l'argent à un joueur")
-        .addStringOption(option => option.setName("discordid").setDescription("L'id discord de l'utilisateur").setRequired(true))
+        .addUserOption(option => option.setName("user").setDescription("Utilisateur ciblé").setRequired(true))
         .addIntegerOption(option => option.setName("amount").setDescription("Amount").setRequired(true)),
     async execute(interaction) {
         await interaction.deferReply();
-        let requestedUserID = interaction.options.getString("discordid")
+        const requestedUser = interaction.options.getUser("user", true)
+        let requestedUserID = requestedUser.id
         let amount = interaction.options.getInteger("amount")
-        await apiDB.prepareUser(requestedUserID)
+        await apiDB.prepareUser(requestedUserID, requestedUser.username)
         await transactionFunctions.subMoney(requestedUserID, amount)
         await interaction.editReply(`${amount.toString()}$ ont été retirés à l'utilisateur ${requestedUserID}`)
     },

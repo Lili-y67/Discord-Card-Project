@@ -5,8 +5,7 @@ const {
 	MediaGalleryBuilder,
 	MediaGalleryItemBuilder,
 	MessageFlags,
-	SeparatorBuilder,
-	ThumbnailBuilder
+	SeparatorBuilder
 } = require('discord.js');
 const Canvas = require('canvas');
 const fs = require('node:fs');
@@ -40,9 +39,8 @@ const getCardEmbed = async (clientBot, cardID, requestedByUser = null) => {
 		throw new Error(`Carte ${cardID} introuvable.`)
 	}
 
-	const playerName = getCardPlayerName(card)
 	const playerID = card.playerID ?? "?"
-	const playerMention = getPlayerMention(card)
+	const playerDisplay = await getPlayerDisplay(clientBot, card)
 
 	const creatorUser = await getUserDisplay(clientBot, card.creatorID)
 	const ownerUser = await getUserDisplay(clientBot, card.ownerID)
@@ -54,7 +52,7 @@ const getCardEmbed = async (clientBot, cardID, requestedByUser = null) => {
     .addFields(
 	{
 		name: "Joueur :",
-		value: playerMention ? `${playerMention} (joueur ${playerID})` : `${playerName} (joueur ${playerID})`,
+		value: `${playerDisplay} (joueur ${playerID})`,
 		inline: true
 	},
 	{
@@ -78,11 +76,6 @@ const getCardEmbed = async (clientBot, cardID, requestedByUser = null) => {
 		inline: true
 	}
 	)
-    .setTimestamp()
-    .setFooter({ text: `Carte créée le ${new Date(card.creationStamp).toLocaleDateString("fr-FR")}`});
-
-    const requesterAvatar = requestedByUser?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true })
-    if(requesterAvatar) cardEmbed.setThumbnail(requesterAvatar)
     return cardEmbed
 }
 
@@ -101,21 +94,11 @@ const getCardReply = async (clientBot, cardID, requestedByUser = null, ephemeral
 const getCardContainer = async (clientBot, card, requestedByUser = null) => {
 	const creatorDisplay = await getUserDisplay(clientBot, card.creatorID)
 	const ownerDisplay = await getUserDisplay(clientBot, card.ownerID)
-	const playerDisplay = getPlayerDisplay(card)
-	const creationDate = new Date(card.creationStamp).toLocaleDateString("fr-FR")
-	const thumbnailURL = requestedByUser?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true })
+	const playerDisplay = await getPlayerDisplay(clientBot, card)
 
 	const container = new ContainerBuilder()
 		.setAccentColor(parseColor(card.embedColor))
-		.addSectionComponents(section => {
-			section.addTextDisplayComponents(text =>
-				text.setContent(`## Carte numero ${card.cardID}\nDemandee par ${getRequestedByDisplay(requestedByUser)}`)
-			)
-			if(thumbnailURL){
-				section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailURL))
-			}
-			return section
-		})
+		.addTextDisplayComponents(text => text.setContent(`## Carte numero ${card.cardID}`))
 		.addSeparatorComponents(new SeparatorBuilder())
 		.addTextDisplayComponents(text =>
 			text.setContent([
@@ -123,8 +106,7 @@ const getCardContainer = async (clientBot, card, requestedByUser = null) => {
 				`**Rarete** ${mentionSafety.escapeMarkdown(card.rarity)} (${card.rarityValue})`,
 				`**Createur** ${creatorDisplay}`,
 				`**Possesseur** ${ownerDisplay}`,
-				`**Statut** ${card.locked ? "Verrouillee" : "Deverrouillee"}`,
-				`-# Carte creee le ${creationDate}`
+				`**Statut** ${card.locked ? "Verrouillee" : "Deverrouillee"}`
 			].join("\n"))
 		)
 
@@ -176,9 +158,10 @@ const getRequestedByDisplay = (user) => {
 	return mentionSafety.getUserMention(user?.id) || mentionSafety.getDisplayName(user?.username, "Utilisateur")
 }
 
-const getPlayerDisplay = (card) => {
-	const mention = getPlayerMention(card)
-	return mention || mentionSafety.escapeMarkdown(getCardPlayerName(card))
+const getPlayerDisplay = async (clientBot, card) => {
+	const discordID = card.playerData?.discordID?.toString()
+	if(/^\d{17,20}$/.test(discordID || "")) return await getUserDisplay(clientBot, discordID)
+	return mentionSafety.escapeMarkdown(getCardPlayerName(card))
 }
 
 const parseColor = (color) => {

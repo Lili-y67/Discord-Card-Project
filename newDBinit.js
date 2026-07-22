@@ -14,6 +14,8 @@ const createUserTB = 'CREATE TABLE IF NOT EXISTS "usersData"("discordID" TEXT NO
 const createCardsDataTB = `CREATE TABLE IF NOT EXISTS "cardsData" (
 	"cardID"	INTEGER NOT NULL UNIQUE,
 	"playerID"	INTEGER,
+	"playerDiscordID" TEXT,
+	"playerNameSnapshot" TEXT,
 	"rarityValue"	INTEGER,
 	"rarity"	TEXT,
 	"creatorID"	TEXT,
@@ -37,6 +39,7 @@ const createPlayerDataTB = `CREATE TABLE IF NOT EXISTS "playersData" (
 	"discordID"	TEXT,
 	"playerName"	TEXT,
 	"playerEmote"	TEXT,
+	"active"	INTEGER DEFAULT 1,
 	PRIMARY KEY("playerID" AUTOINCREMENT)
 );`;
 
@@ -89,10 +92,13 @@ DB.serialize(() => {
     DB.run(createQuestDailyProgressTB);
 
     DB.run(`ALTER TABLE "playersData" ADD COLUMN "discordID" TEXT`, () => {});
+    DB.run(`ALTER TABLE "playersData" ADD COLUMN "active" INTEGER DEFAULT 1`, () => {});
     DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "lastQuestMessageStamp" INTEGER DEFAULT 0`, () => {});
     DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "pickBoostUntil" INTEGER DEFAULT 0`, () => {});
     DB.run(`ALTER TABLE "questUserStats" ADD COLUMN "pickBoostMultiplier" REAL DEFAULT 1`, () => {});
     DB.run(`ALTER TABLE "usersData" ADD COLUMN "dailyCount" INTEGER DEFAULT 0`, () => {});
+    DB.run(`ALTER TABLE "cardsData" ADD COLUMN "playerDiscordID" TEXT`, () => {});
+    DB.run(`ALTER TABLE "cardsData" ADD COLUMN "playerNameSnapshot" TEXT`, () => {});
 
 	const playerDataInsert = DB.prepare('INSERT OR REPLACE INTO "playersData" (playerID, discordID, playerName, playerEmote) VALUES(?,?,?,?)');
 	for (const id of playerIDs) {

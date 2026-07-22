@@ -4,8 +4,7 @@ const {
     ButtonStyle,
     ContainerBuilder,
     MessageFlags,
-    SeparatorBuilder,
-    ThumbnailBuilder
+    SeparatorBuilder
 } = require('discord.js');
 
 const apiDB = require("./apiDB");
@@ -68,18 +67,9 @@ const getTopReply = async (user, type = "money", page = 1, expiresAt = component
 const getTopContainer = (user, type, rows, currentPage, totalPages, expiresAt) => {
     const topConfig = TOP_TYPES[type];
     const pageRows = rows.slice(constants.USERSPERBALTOPPAGE * (currentPage - 1), constants.USERSPERBALTOPPAGE * currentPage);
-    const thumbnailURL = user?.displayAvatarURL?.({ extension: "png", size: 128, forceStatic: true });
     const container = new ContainerBuilder()
         .setAccentColor(TOP_ACCENT_COLOR)
-        .addSectionComponents(section => {
-            section.addTextDisplayComponents(text =>
-                text.setContent(`## ${topConfig.title}\n-# Demande par ${mentionSafety.getUserMention(user?.id) || mentionSafety.getDisplayName(user?.username)}`)
-            );
-            if(thumbnailURL){
-                section.setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnailURL));
-            }
-            return section;
-        })
+        .addTextDisplayComponents(text => text.setContent(`## ${topConfig.title}`))
         .addSeparatorComponents(new SeparatorBuilder());
 
     if(pageRows.length == 0){

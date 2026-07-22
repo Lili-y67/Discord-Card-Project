@@ -98,6 +98,8 @@ const ensureDatabaseSchema = async () => {
     await DB.run(`CREATE TABLE IF NOT EXISTS "${cardsDataTB}" (
         "cardID" INTEGER NOT NULL UNIQUE,
         "playerID" INTEGER,
+        "playerDiscordID" TEXT,
+        "playerNameSnapshot" TEXT,
         "rarityValue" INTEGER,
         "rarity" TEXT,
         "creatorID" TEXT,
@@ -121,6 +123,7 @@ const ensureDatabaseSchema = async () => {
         "discordID" TEXT,
         "playerName" TEXT,
         "playerEmote" TEXT,
+        "active" INTEGER DEFAULT 1,
         PRIMARY KEY("playerID" AUTOINCREMENT)
     )`)
 
@@ -171,6 +174,15 @@ const ensureDatabaseSchema = async () => {
     await addColumnIfMissing(questUserStatsTB, "pickBoostUntil", "INTEGER DEFAULT 0")
     await addColumnIfMissing(questUserStatsTB, "pickBoostMultiplier", "REAL DEFAULT 1")
     await addColumnIfMissing(usersDataTB, "dailyCount", "INTEGER DEFAULT 0")
+    await addColumnIfMissing(cardsDataTB, "playerDiscordID", "TEXT")
+    await addColumnIfMissing(cardsDataTB, "playerNameSnapshot", "TEXT")
+    await addColumnIfMissing(playersDataTB, "active", "INTEGER DEFAULT 1")
+    await DB.run(`UPDATE ${cardsDataTB}
+        SET playerDiscordID = (SELECT discordID FROM ${playersDataTB} WHERE playersData.playerID = cardsData.playerID)
+        WHERE playerDiscordID IS NULL`)
+    await DB.run(`UPDATE ${cardsDataTB}
+        SET playerNameSnapshot = (SELECT playerName FROM ${playersDataTB} WHERE playersData.playerID = cardsData.playerID)
+        WHERE playerNameSnapshot IS NULL`)
     schemaReady.add(schemaKey)
 }
 
@@ -185,8 +197,9 @@ const addColumnIfMissing = async (tableName, columnName, definition) => {
 
 const createACard = async (playerID, rarity, rarityValue, creatorID) => {
     const embedColor = constants.CARDSTATSCOLORDICO[rarity] || constants.DEFAULTCARDEMBEDCOLOR
-    let createACardQuery = `INSERT INTO ${cardsDataTB} (playerID, rarityValue, rarity, creatorID, creationStamp, ownerID, lastOwnerChangeStamp, imageURL, embedColor, locked, userLocked) VALUES(?,?,?,?,?,?,?,?,?,?,?)`
-    await DB.run(createACardQuery, [playerID, rarityValue, rarity, creatorID, Date.now(), creatorID, Date.now(), constants.DEFAULTCARDIMAGEURL, embedColor, 0, 0])
+    const playerData = await getPlayerDataFromID(playerID)
+    let createACardQuery = `INSERT INTO ${cardsDataTB} (playerID, playerDiscordID, playerNameSnapshot, rarityValue, rarity, creatorID, creationStamp, ownerID, lastOwnerChangeStamp, imageURL, embedColor, locked, userLocked) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    await DB.run(createACardQuery, [playerID, playerData?.discordID || null, playerData?.playerName || null, rarityValue, rarity, creatorID, Date.now(), creatorID, Date.now(), constants.DEFAULTCARDIMAGEURL, embedColor, 0, 0])
     let requestLastCardQuery = `SELECT seq FROM ${sqliteSequence} WHERE name='cardsData'`
     return (await DB.get(requestLastCardQuery)).seq
 }
@@ -203,16 +216,26 @@ const getACardFromID = async (cardID) => {
     let resp = await DB.get(getCardQuery)
     if(!resp) return null
     normalizeCardRarity(resp)
-    resp.playerData = await getPlayerDataFromID(resp.playerID)
+    resp.playerData = await getCardPlayerData(resp)
     return resp
 }
 
 const hydrateCardsWithPlayerData = async (cards) => {
     for(const card of cards){
         normalizeCardRarity(card)
-        card.playerData = await getPlayerDataFromID(card.playerID)
+        card.playerData = await getCardPlayerData(card)
     }
     return cards
+}
+
+const getCardPlayerData = async card => {
+    const currentPlayer = await getPlayerDataFromID(card.playerID)
+    return {
+        ...currentPlayer,
+        playerID: card.playerID,
+        discordID: card.playerDiscordID || currentPlayer?.discordID || null,
+        playerName: card.playerNameSnapshot || currentPlayer?.playerName || `Joueur ${card.playerID}`
+    }
 }
 
 const normalizeCardRarity = (card) => {
@@ -452,6 +475,14 @@ const editACard = async (cardID, args={rarityValue:false, rarity:false, playerID
     let editACardQuery = `UPDATE ${cardsDataTB}` + (!(args.rarityValue===false) || (!(args.rarity===false) || !(args.playerID===false)) ? ` SET ` : ``) + (!(args.rarityValue===false) ? `'rarityValue' = ${args.rarityValue}` : ``) + (!(args.rarityValue===false) && (!(args.rarity===false) || !(args.playerID===false)) ? `,` : ``) + (!(args.rarity===false) ? `'rarity' = '${args.rarity}'` : ``) + (!(args.rarity===false) && !(args.playerID===false) ? `,` : ``) + (!(args.playerID===false) ? `'playerID' = ${args.playerID}` : ``) + ` WHERE cardID=${cardID}`
 
     await DB.run(editACardQuery)
+    if(!(args.playerID === false)){
+        const playerData = await getPlayerDataFromID(args.playerID)
+        await DB.run(`UPDATE ${cardsDataTB} SET playerDiscordID = ?, playerNameSnapshot = ? WHERE cardID = ?`, [
+            playerData?.discordID || null,
+            playerData?.playerName || `Joueur ${args.playerID}`,
+            cardID
+        ])
+    }
 }
 
 
@@ -478,7 +509,7 @@ const getPlayerDataFromID = async (playerID) => {
 const getGuildPlayersList = async () => {
     return await DB.all(
         `SELECT * FROM ${playersDataTB}
-         WHERE discordID IS NOT NULL
+         WHERE discordID IS NOT NULL AND COALESCE(active, 1) = 1
          ORDER BY playerName COLLATE NOCASE, playerID`
     )
 }
@@ -486,7 +517,7 @@ const getGuildPlayersList = async () => {
 const getRandomPickablePlayerID = async () => {
     const row = await DB.get(
         `SELECT playerID FROM ${playersDataTB}
-         WHERE discordID IS NOT NULL
+         WHERE discordID IS NOT NULL AND COALESCE(active, 1) = 1
          ORDER BY RANDOM()
          LIMIT 1`
     )
@@ -936,9 +967,12 @@ const upsertGuildPlayer = async (discordID, playerName) => {
         const wasUpdated = existingPlayer.playerName !== playerName
         if(wasUpdated){
             await DB.run(
-                `UPDATE ${playersDataTB} SET playerName = ? WHERE playerID = ?`,
+                `UPDATE ${playersDataTB} SET playerName = ?, active = 1 WHERE playerID = ?`,
                 [playerName, existingPlayer.playerID]
             )
+        }
+        else{
+            await DB.run(`UPDATE ${playersDataTB} SET active = 1 WHERE playerID = ?`, [existingPlayer.playerID])
         }
         return { added: false, updated: wasUpdated, playerID: existingPlayer.playerID }
     }
@@ -949,14 +983,14 @@ const upsertGuildPlayer = async (discordID, playerName) => {
     )
     if(legacyPlayer){
         await DB.run(
-            `UPDATE ${playersDataTB} SET discordID = ?, playerName = ? WHERE playerID = ?`,
+            `UPDATE ${playersDataTB} SET discordID = ?, playerName = ?, active = 1 WHERE playerID = ?`,
             [discordID, playerName, legacyPlayer.playerID]
         )
         return { added: false, updated: true, playerID: legacyPlayer.playerID }
     }
 
     await DB.run(
-        `INSERT INTO ${playersDataTB} (discordID, playerName, playerEmote) VALUES (?, ?, NULL)`,
+        `INSERT INTO ${playersDataTB} (discordID, playerName, playerEmote, active) VALUES (?, ?, NULL, 1)`,
         [discordID, playerName]
     )
     const insertedPlayer = await DB.get(
@@ -973,7 +1007,7 @@ const removeGuildPlayerByDiscordID = async (discordID) => {
     )
     if(!existingPlayer) return { removed: false, playerID: null, playerName: null }
 
-    await DB.run(`DELETE FROM ${playersDataTB} WHERE playerID = ?`, [existingPlayer.playerID])
+    await DB.run(`UPDATE ${playersDataTB} SET active = 0 WHERE playerID = ?`, [existingPlayer.playerID])
     return { removed: true, playerID: existingPlayer.playerID, playerName: existingPlayer.playerName }
 }
 

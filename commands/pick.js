@@ -24,7 +24,7 @@ module.exports = {
 		}
 		else{
 			const nextPickUnix = Math.ceil(tryPick.nextPickTimestamp / 1000)
-			await interaction.editReply(`Vous pourrez à nouveau tirer une carte le <t:${nextPickUnix}:F> à <t:${nextPickUnix}:T>.`)
+			await interaction.editReply(`Vous pourrez à nouveau tirer une carte le <t:${nextPickUnix}:F>.`)
 		}
 	},
 };

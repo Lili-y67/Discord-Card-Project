@@ -60,7 +60,7 @@ const helpPages = (cmd) => ({
             },
             {
                 name: '3. Voir ses cartes',
-                value: `${cmd('inv')} affiche votre inventaire.\n${cmd('card', 'cardid:<numéro>')} affiche les informations complètes d’une carte.`
+                value: `${cmd('inv')} affiche votre inventaire.\n${cmd('card')} ouvre un sélecteur paginé pour afficher une carte.`
             },
             {
                 name: '4. Suivre sa progression',
@@ -74,10 +74,10 @@ const helpPages = (cmd) => ({
         fields: [
             { name: cmd('pick'), value: 'Tire une carte gratuite lorsque votre délai est terminé.' },
             { name: cmd('buypick'), value: 'Achète immédiatement un tirage supplémentaire.' },
-            { name: cmd('card', 'cardid:<numéro>'), value: 'Affiche le joueur, la rareté, la valeur, le propriétaire, le statut et l’image de la carte.' },
+            { name: cmd('card'), value: 'Choisissez une carte dans le menu paginé pour afficher son aperçu complet.' },
             { name: cmd('cards'), value: 'Parcourt toutes les cartes enregistrées avec un menu pour en afficher une.' },
-            { name: cmd('sell', 'cardid:<numéro>'), value: 'Vend une carte à la banque contre de l’argent.' },
-            { name: cmd('discard', 'cardid:<numéro>'), value: 'Détruit une carte pour recevoir des points de carte.' }
+            { name: cmd('sell'), value: 'Choisissez une carte puis confirmez sa vente à la banque.' },
+            { name: cmd('discard'), value: 'Choisissez une carte puis confirmez sa conversion en points.' }
         ]
     },
     collection: {
@@ -89,7 +89,7 @@ const helpPages = (cmd) => ({
             { name: cmd('collection'), value: 'Affiche les joueurs et raretés déjà obtenus. L’option `user` permet de consulter un autre membre.' },
             { name: cmd('collectioncard', 'user:<membre>'), value: 'Affiche les cartes possédées concernant un membre ciblé, avec galerie d’images.' },
             { name: cmd('guildcollection'), value: 'Prévisualise les cartes possibles des membres du serveur.' },
-            { name: 'Où trouver le numéro ?', value: `Le \`cardid\` est le numéro unique affiché dans ${cmd('inv')}, ${cmd('cards')} et sur la carte.` }
+            { name: 'Choix des cartes', value: 'Les commandes utilisent maintenant des menus paginés : aucun numéro de carte à recopier.' }
         ]
     },
     economie: {
@@ -108,8 +108,8 @@ const helpPages = (cmd) => ({
         description: `La commande ${cmd('trade')} permet d’échanger des cartes, de l’argent, ou les deux.`,
         fields: [
             { name: 'Commande minimale', value: `${cmd('trade', 'user:<membre>')} puis ajoutez ce que vous proposez ou demandez.` },
-            { name: 'Proposer des cartes', value: 'Dans `cartes_proposées`, séparez les numéros par des virgules : `36, 44, 23`.' },
-            { name: 'Demander des cartes', value: 'Utilisez le même format dans `cartes_demandées`. Le maximum est de 10 cartes par côté.' },
+            { name: 'Proposer des cartes', value: 'Sélectionnez jusqu’à 10 de vos cartes dans le menu paginé.' },
+            { name: 'Demander des cartes', value: 'Sélectionnez jusqu’à 10 cartes du partenaire dans son menu.' },
             { name: 'Ajouter de l’argent', value: 'Renseignez `argent_proposé` ou `argent_demandé` selon le sens du transfert.' },
             { name: 'Validation', value: 'Vérifiez attentivement le récapitulatif avant d’accepter ou de refuser l’échange.' }
         ]
@@ -151,7 +151,7 @@ const buildOverviewEmbed = (cmd) => new EmbedBuilder()
     .setDescription('Commencez avec ces commandes, puis choisissez une catégorie dans le menu pour obtenir plus de détails.')
     .addFields(
         { name: 'Démarrage rapide', value: `${cmd('pick')} -> ${cmd('daily')} -> ${cmd('inv')} -> ${cmd('profil')}` },
-        { name: 'Examiner une carte', value: cmd('card', 'cardid:<numéro>') },
+        { name: 'Examiner une carte', value: cmd('card') },
         { name: 'Parcourir les cartes', value: `${cmd('cards')} ou ${cmd('guildcollection')}` },
         { name: 'Quêtes et roue', value: `${cmd('quetes')} puis ${cmd('roue')}` },
         { name: 'Catégories disponibles', value: categoryChoices.map(choice => `\`${choice.value}\``).join(' - ') }
