@@ -1,0 +1,10 @@
+[
+  { "id": "money_75", "label": "75$", "display": "75$", "weight": 28, "color": "#ff7a18", "reward": { "money": 75 } },
+  { "id": "money_150", "label": "150$", "display": "150$", "weight": 18, "color": "#7357ff", "reward": { "money": 150 } },
+  { "id": "points_10", "label": "10 points de carte", "display": "10 PTS", "weight": 20, "color": "#158bca", "reward": { "cardPoints": 10 } },
+  { "id": "points_25", "label": "25 points de carte", "display": "25 PTS", "weight": 10, "color": "#9d3dcc", "reward": { "cardPoints": 25 } },
+  { "id": "ticket_1", "label": "1 ticket de roue", "display": "+1 TICKET", "weight": 8, "color": "#1d9b65", "reward": { "wheelTickets": 1 } },
+  { "id": "xp_100", "label": "100 XP bonus", "display": "100 XP", "weight": 8, "color": "#db3b63", "reward": { "xp": 100 } },
+  { "id": "pick_boost", "label": "Cooldown /pick -25% pendant 1h", "display": "BOOST", "weight": 6, "color": "#d89b20", "reward": { "pickBoost": { "multiplier": 0.75, "durationMs": 3600000 } } },
+  { "id": "jackpot_500", "label": "Jackpot 500$", "display": "JACKPOT", "weight": 2, "color": "#e82f2f", "reward": { "money": 500, "xp": 150 } }
+]

@@ -72,16 +72,7 @@ const DAILY_QUESTS = [
     }
 ];
 
-const WHEEL_REWARDS = [
-    { label: "75$", weight: 28, reward: { money: 75 } },
-    { label: "150$", weight: 18, reward: { money: 150 } },
-    { label: "10 points de carte", weight: 20, reward: { cardPoints: 10 } },
-    { label: "25 points de carte", weight: 10, reward: { cardPoints: 25 } },
-    { label: "1 ticket de roue", weight: 8, reward: { wheelTickets: 1 } },
-    { label: "XP bonus", weight: 8, reward: { xp: 100 } },
-    { label: "Cooldown /pick -25% pendant 1h", weight: 6, reward: { pickBoost: { multiplier: 0.75, durationMs: 3600000 } } },
-    { label: "Jackpot 500$", weight: 2, reward: { money: 500, xp: 150 } }
-];
+const WHEEL_REWARDS = require("../data/wheel-rewards.json");
 
 const getQuestDate = () => new Date().toISOString().slice(0, 10);
 
@@ -204,6 +195,7 @@ const spinWheel = async (discordID) => {
     return {
         ok: true,
         label: wheelReward.label,
+        selectedIndex: WHEEL_REWARDS.indexOf(wheelReward),
         rewards,
         levelResult
     };
@@ -404,5 +396,7 @@ module.exports = {
     createWheelEmbed,
     getPickCooldownMultiplier,
     getQuestReply,
-    handleQuestButton
+    handleQuestButton,
+    WHEEL_REWARDS,
+    formatRewardSummary
 };
