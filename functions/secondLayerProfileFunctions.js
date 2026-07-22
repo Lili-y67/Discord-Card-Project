@@ -7,7 +7,7 @@ const constants = require("../data/constants");
 const mentionSafety = require("./mentionSafety");
 const componentLifecycle = require("./componentLifecycle");
 
-const BACKGROUNDS = ["black", "navy", "purple", "forest", "custom"];
+const BACKGROUNDS = ["black", "navy", "purple", "forest", "discord", "custom"];
 const SETTING_PREFIX = "profileBackground:";
 const CUSTOM_BACKGROUND_SETTING_PREFIX = "profileBackgroundPath:";
 const MAX_BACKGROUND_BYTES = 2 * 1024 * 1024;
@@ -15,16 +15,25 @@ const BACKGROUNDS_DIRECTORY = path.join(__dirname, "../data/profile-backgrounds"
 
 const getProfileReply = async (profileUser, requestedByUser, expiresAt = componentLifecycle.createExpiresAt()) => {
     const userDB = await apiDB.getAUserFromDiscordID(profileUser.id);
+    await apiDB.prepareQuestUser(profileUser.id);
+    const questStats = await apiDB.getQuestUserStats(profileUser.id);
+    const questNextXP = 100 + Math.max(1, Number(questStats.level) || 1) * 75;
     const data = {
         money: Number(userDB.money) || 0,
         points: Number(userDB.cardPoints) || 0,
         rank: constants.RANKIDTORANKNAMEDICO[userDB.rankID] || `Rang ${userDB.rankID}`,
         picked: await apiDB.getPickedCardsNumberOfAUser(profileUser.id),
-        owned: await apiDB.getOwnedCardsNumberOfAUser(profileUser.id)
+        owned: await apiDB.getOwnedCardsNumberOfAUser(profileUser.id),
+        questLevel: Number(questStats.level) || 1,
+        questXP: Number(questStats.xp) || 0,
+        questNextXP
     };
     const background = await getBackground(profileUser.id);
+    const renderedUser = background === "discord"
+        ? await profileUser.client.users.fetch(profileUser.id, { force: true }).catch(() => profileUser)
+        : profileUser;
     const fileName = `profil-${profileUser.id}.png`;
-    const image = await generateProfileImage(profileUser, data, background);
+    const image = await generateProfileImage(renderedUser, data, background);
     const ownProfile = profileUser.id === requestedByUser.id;
     const container = new ContainerBuilder().setAccentColor(0xFC6600)
         .addTextDisplayComponents(text => text.setContent(`## Profil de ${mentionSafety.getUserMention(profileUser.id)}\n-# Fond : ${backgroundLabel(background)}`))
@@ -47,7 +56,7 @@ const getProfileReply = async (profileUser, requestedByUser, expiresAt = compone
 const generateProfileImage = async (user, data, background) => {
     const canvas = Canvas.createCanvas(1100, 460);
     const ctx = canvas.getContext("2d");
-    await drawBackground(ctx, canvas.width, canvas.height, background, user.id);
+    await drawBackground(ctx, canvas.width, canvas.height, background, user);
     ctx.globalAlpha = 0.12; ctx.fillStyle = "#ffffff";
     ctx.beginPath(); ctx.arc(1060, -30, 260, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(980, 550, 210, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
@@ -63,6 +72,8 @@ const generateProfileImage = async (user, data, background) => {
     ctx.fillStyle = "#ffffff"; ctx.font = "700 42px Arial";
     ctx.fillText(truncate(ctx, getRenderableProfileName(user), 330), 45, 365);
     ctx.fillStyle = "#ff9b54"; ctx.font = "600 23px Arial"; ctx.fillText(data.rank.toUpperCase(), 45, 405);
+    ctx.fillStyle = "#e4ccff"; ctx.font = "600 18px Arial";
+    ctx.fillText(`QUÊTES NIV. ${data.questLevel} · ${data.questXP}/${data.questNextXP} XP`, 45, 438);
     drawStat(ctx, 380, 95, "SOLDE", `${data.money.toLocaleString("fr-FR")}$`, "#ffb35c");
     drawStat(ctx, 720, 95, "POINTS", data.points.toLocaleString("fr-FR"), "#c997ff");
     drawStat(ctx, 380, 255, "CARTES PICK", data.picked.toLocaleString("fr-FR"), "#62c8ff");
@@ -70,7 +81,23 @@ const generateProfileImage = async (user, data, background) => {
     return canvas.toBuffer("image/png");
 };
 
-const drawBackground = async (ctx, width, height, background, userID) => {
+const drawBackground = async (ctx, width, height, background, user) => {
+    const userID = user.id;
+    if(background === "discord"){
+        try {
+            const bannerURL = user.bannerURL({ extension: "png", size: 2048 });
+            if(bannerURL){
+                const image = await Canvas.loadImage(bannerURL);
+                drawImageCover(ctx, image, 0, 0, width, height);
+                ctx.fillStyle = "rgba(0, 0, 0, 0.30)";
+                ctx.fillRect(0, 0, width, height);
+                return;
+            }
+        } catch(error) {
+            console.error(`Bannière Discord indisponible pour ${userID}: ${error.message}`);
+        }
+        background = "black";
+    }
     if(background === "custom"){
         const customPath = await apiDB.getPersistentTextSetting(`${CUSTOM_BACKGROUND_SETTING_PREFIX}${userID}`, "");
         if(customPath && fs.existsSync(customPath)){
@@ -126,7 +153,8 @@ const handleProfileModal = async (client, interaction) => {
     if(parts.length !== 5 || parts[0] !== "profile" || parts[1] !== "bgmodal") return false;
     const profileID = parts[2], requesterID = parts[3], expiresAt = Number(parts[4]);
     if(componentLifecycle.isExpired(expiresAt)){
-        await interaction.reply({ content: "Ce panneau de profil a expiré. Relance `/profil`.", flags: MessageFlags.Ephemeral });
+        const profileMention = await mentionSafety.getCommandMention(client, "profil", interaction.guildId);
+        await interaction.reply({ content: `Ce panneau de profil a expiré. Relance ${profileMention}.`, flags: MessageFlags.Ephemeral });
         return true;
     }
     if(interaction.user.id !== profileID || interaction.user.id !== requesterID){
@@ -182,6 +210,7 @@ const getBackgroundModal = (profileID, requesterID, currentBackground, expiresAt
                     themeOption("Bleu nuit", "navy", currentBackground),
                     themeOption("Violet", "purple", currentBackground),
                     themeOption("Forêt", "forest", currentBackground),
+                    themeOption("Bannière Discord", "discord", currentBackground),
                     themeOption("Image personnalisée actuelle", "custom", currentBackground)
                 )),
         new LabelBuilder()
@@ -220,5 +249,5 @@ const saveCustomBackground = async (upload, profileID) => {
 };
 
 const getBackground = async id => { const value = await apiDB.getPersistentTextSetting(`${SETTING_PREFIX}${id}`, "black"); return BACKGROUNDS.includes(value) ? value : "black"; };
-const backgroundLabel = value => ({ black: "Noir", navy: "Bleu nuit", purple: "Violet", forest: "Forêt", custom: "Image personnalisée" }[value] || "Noir");
+const backgroundLabel = value => ({ black: "Noir", navy: "Bleu nuit", purple: "Violet", forest: "Forêt", discord: "Bannière Discord (noir si absente)", custom: "Image personnalisée" }[value] || "Noir");
 module.exports = { getProfileReply, handleProfileButton, handleProfileModal, generateProfileImage, getBackgroundModal, validateBackgroundUpload };

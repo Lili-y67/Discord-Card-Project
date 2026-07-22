@@ -154,6 +154,8 @@ const ensureDatabaseSchema = async () => {
         "dropID" TEXT NOT NULL UNIQUE,
         "type" TEXT NOT NULL,
         "creatorID" TEXT NOT NULL,
+        "title" TEXT,
+        "description" TEXT,
         "amount" INTEGER DEFAULT 0,
         "playerID" INTEGER,
         "rarity" TEXT,
@@ -177,6 +179,8 @@ const ensureDatabaseSchema = async () => {
     await addColumnIfMissing(cardsDataTB, "playerDiscordID", "TEXT")
     await addColumnIfMissing(cardsDataTB, "playerNameSnapshot", "TEXT")
     await addColumnIfMissing(playersDataTB, "active", "INTEGER DEFAULT 1")
+    await addColumnIfMissing(dropsTB, "title", "TEXT")
+    await addColumnIfMissing(dropsTB, "description", "TEXT")
     await DB.run(`UPDATE ${cardsDataTB}
         SET playerDiscordID = (SELECT discordID FROM ${playersDataTB} WHERE playersData.playerID = cardsData.playerID)
         WHERE playerDiscordID IS NULL`)
@@ -456,7 +460,8 @@ const getCardsIDListHUB = async (args={ownerID:false, creatorID:false, excludedU
 }
 
 const getDistinctPlayerIDAndRarityInUserInventory = async (discordID) => {
-    const cards = await DB.all(`SELECT DISTINCT playerID, rarity FROM ${cardsDataTB} WHERE ownerID = ?`, [discordID.toString()])
+    const cards = await DB.all(`SELECT playerID, rarity, COUNT(*) AS copies FROM ${cardsDataTB}
+        WHERE ownerID = ? GROUP BY playerID, rarity`, [discordID.toString()])
     return cards.map(normalizeCardRarity)
 }
 
@@ -536,8 +541,8 @@ const findPlayerData = async (query) => {
 
 const createDrop = async (drop) => {
     await ensureDatabaseSchema()
-    await DB.run(`INSERT INTO ${dropsTB} (dropID, type, creatorID, amount, playerID, rarity, copies, maxWinners, expiresAt, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`, [drop.dropID, drop.type, drop.creatorID, drop.amount || 0, drop.playerID || null, drop.rarity || null, drop.copies || 1, drop.maxWinners, drop.expiresAt])
+    await DB.run(`INSERT INTO ${dropsTB} (dropID, type, creatorID, title, description, amount, playerID, rarity, copies, maxWinners, expiresAt, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`, [drop.dropID, drop.type, drop.creatorID, drop.title || null, drop.description || null, drop.amount || 0, drop.playerID || null, drop.rarity || null, drop.copies || 1, drop.maxWinners, drop.expiresAt])
 }
 
 const getDrop = async (dropID) => {
@@ -568,6 +573,11 @@ const claimDropSlot = async (dropID, userID) => {
 const releaseDropClaim = async (dropID, userID) => {
     await DB.run(`DELETE FROM ${dropClaimsTB} WHERE dropID = ? AND userID = ?`, [dropID, userID.toString()])
     await DB.run(`UPDATE ${dropsTB} SET status = 'open' WHERE dropID = ?`, [dropID])
+}
+
+const expireDrop = async dropID => {
+    await ensureDatabaseSchema()
+    await DB.run(`UPDATE ${dropsTB} SET status = 'expired' WHERE dropID = ? AND status = 'open'`, [dropID])
 }
 
 //>playersNames
@@ -601,7 +611,7 @@ const hasEnoughMoney = async (discordID, amount) => {
 }
 
 const getBaltopRowsList = async() => {
-    let getBaltopRowsListQuery = `SELECT name, money FROM ${usersDataTB} ORDER BY money DESC`
+    let getBaltopRowsListQuery = `SELECT discordID, name, money FROM ${usersDataTB} ORDER BY money DESC`
     return await DB.all(getBaltopRowsListQuery)
 }
 
@@ -630,24 +640,24 @@ const hasEnoughCardPoints = async (discordID, amount) => {
 }
 
 const getCardPointstopRowsList = async() => {
-    let getCardPointstopRowsListQuery = `SELECT name, cardPoints FROM ${usersDataTB} ORDER BY cardPoints DESC`
+    let getCardPointstopRowsListQuery = `SELECT discordID, name, cardPoints FROM ${usersDataTB} ORDER BY cardPoints DESC`
     return await DB.all(getCardPointstopRowsListQuery)
 }
 
 const getOwnedCardTopRowsList = async() => {
-    return await DB.all(`SELECT u.name, COUNT(c.cardID) AS ownedCards
+    return await DB.all(`SELECT u.discordID, u.name, COUNT(c.cardID) AS ownedCards
         FROM ${usersDataTB} u LEFT JOIN ${cardsDataTB} c ON c.ownerID = u.discordID
         GROUP BY u.discordID, u.name ORDER BY ownedCards DESC, u.name COLLATE NOCASE`)
 }
 
 const getPickTopRowsList = async() => {
-    return await DB.all(`SELECT u.name, COUNT(c.cardID) AS pickCount
+    return await DB.all(`SELECT u.discordID, u.name, COUNT(c.cardID) AS pickCount
         FROM ${usersDataTB} u LEFT JOIN ${cardsDataTB} c ON c.creatorID = u.discordID
         GROUP BY u.discordID, u.name ORDER BY pickCount DESC, u.name COLLATE NOCASE`)
 }
 
 const getDailyTopRowsList = async() => {
-    return await DB.all(`SELECT name, COALESCE(dailyCount, 0) AS dailyCount
+    return await DB.all(`SELECT discordID, name, COALESCE(dailyCount, 0) AS dailyCount
         FROM ${usersDataTB} ORDER BY dailyCount DESC, name COLLATE NOCASE`)
 }
 
@@ -1098,6 +1108,7 @@ module.exports = {
     getDropClaims,
     claimDropSlot,
     releaseDropClaim,
+    expireDrop,
     prepareQuestUser,
     getQuestUserStats,
     updateQuestUserStats,

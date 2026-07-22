@@ -20,7 +20,7 @@ module.exports = {
 			await interaction.editReply(await pickFunctions.getBalanceReply(interaction.user, tryDaily.balanceChange, "Récompense quotidienne"));
 		}
 		else{
-			await interaction.editReply(`Vous avez déjà effectué votre </:1528720102156140603:> aujourd'hui!`)
+			await interaction.editReply(`Vous avez déjà effectué votre </daily:${interaction.commandId}> aujourd'hui !`)
 		}
 	},
 };

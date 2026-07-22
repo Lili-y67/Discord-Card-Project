@@ -148,6 +148,9 @@ client.on('interactionCreate', async interaction => {
 	await apiDB.withGuild(interaction.guildId, async () => {
 
 	if(interaction.isModalSubmit()){
+		if(await client.commands.get("give")?.handleGiveModal?.(client, interaction)){
+			return;
+		}
 		if(await profileFunctions.handleProfileModal(client, interaction)){
 			return;
 		}
@@ -160,6 +163,9 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	if(interaction.isButton()){
+		if(await questCore.handleQuestButton(client, interaction)){
+			return;
+		}
 		if(await tradeBuilderFunctions.handleButton(client, interaction)){
 			return;
 		}

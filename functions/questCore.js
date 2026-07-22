@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, EmbedBuilder, MessageFlags, SeparatorBuilder } = require('discord.js');
 
 const apiDB = require("./apiDB");
 const constants = require("../data/constants.js");
@@ -91,6 +91,17 @@ const getDailyQuests = () => DAILY_QUESTS;
 
 const getQuestByID = (questID) => DAILY_QUESTS.find(quest => quest.id == questID);
 
+const getTierQuestID = (quest, tier) => tier === 1 ? quest.id : `${quest.id}_tier${tier}`;
+const buildTierQuest = (quest, tier) => ({
+    ...quest,
+    id: getTierQuestID(quest, tier),
+    tier,
+    title: `${quest.title} · Palier ${tier}`,
+    target: Math.max(1, Math.ceil(quest.target * (1 + (tier - 1) * 0.75))),
+    reward: Object.fromEntries(Object.entries(quest.reward).map(([key, value]) =>
+        [key, typeof value === "number" ? Math.ceil(value * (1 + (tier - 1) * 0.35)) : value]))
+});
+
 const getUserQuestState = async (discordID) => {
     await apiDB.prepareQuestUser(discordID);
     await normalizeLevel(discordID);
@@ -102,12 +113,15 @@ const getUserQuestState = async (discordID) => {
         stats,
         questDate: getQuestDate(),
         quests: DAILY_QUESTS.map(quest => {
-            const row = progressByID.get(quest.id);
-            const progress = Math.min(Number(row?.progress) || 0, quest.target);
+            let tier = 1;
+            while(progressByID.get(getTierQuestID(quest, tier))?.claimed) tier += 1;
+            const tierQuest = buildTierQuest(quest, tier);
+            const row = progressByID.get(tierQuest.id);
+            const progress = Math.min(Number(row?.progress) || 0, tierQuest.target);
             return {
-                ...quest,
+                ...tierQuest,
                 progress,
-                completed: Boolean(row?.completed) || progress >= quest.target,
+                completed: Boolean(row?.completed) || progress >= tierQuest.target,
                 claimed: Boolean(row?.claimed)
             };
         })
@@ -144,7 +158,8 @@ const trackEvent = async (discordID, eventName, amount = 1) => {
     const questDate = getQuestDate();
     const updated = [];
 
-    for(const quest of DAILY_QUESTS.filter(quest => quest.event == eventName)){
+    const state = await getUserQuestState(discordID);
+    for(const quest of state.quests.filter(quest => quest.event == eventName)){
         const existing = await apiDB.getDailyQuestProgress(discordID, questDate, quest.id);
         if(existing?.claimed) continue;
 
@@ -265,7 +280,7 @@ const createQuestEmbed = async (user) => {
             value: `${quest.description}\nProgression : **${quest.progress}/${quest.target}**${quest.claimed ? "\nRécompense déjà réclamée." : ""}`,
             inline: false
         })))
-        .setFooter({ text: "Utilisez /quetes action:reclamer pour récupérer les récompenses prêtes." });
+        .setFooter({ text: "Utilisez le bouton Réclamer pour récupérer les récompenses prêtes." });
 };
 
 const createClaimEmbed = (claimResult) => {
@@ -281,6 +296,57 @@ const createClaimEmbed = (claimResult) => {
         .setTitle(`${claimResult.claimedQuests.length} quête(s) réclamée(s)`)
         .setDescription(formatRewardSummary(claimResult.rewards, claimResult.levelResult));
 };
+
+const QUESTS_PER_PAGE = 4;
+const getQuestReply = async (user, page = 1, expiresAt = Date.now() + 120000) => {
+    const state = await getUserQuestState(user.id);
+    const level = await normalizeLevel(user.id);
+    const totalPages = Math.max(1, Math.ceil(state.quests.length / QUESTS_PER_PAGE));
+    const currentPage = Math.min(Math.max(Number(page) || 1, 1), totalPages);
+    const shown = state.quests.slice((currentPage - 1) * QUESTS_PER_PAGE, currentPage * QUESTS_PER_PAGE);
+    const claimable = state.quests.filter(quest => quest.completed && !quest.claimed).length;
+    const container = new ContainerBuilder().setAccentColor(0xD72306)
+        .addTextDisplayComponents(text => text.setContent(
+            `## 📜 Quêtes NewGenCard\n**Niveau ${level.level}** · ${level.xp}/${level.nextLevelXP} XP · 🎟️ ${state.stats.wheelTickets || 0}\n-# Chaque récompense réclamée débloque un palier plus difficile.`
+        )).addSeparatorComponents(new SeparatorBuilder());
+    for(const quest of shown){
+        const percent = Math.min(10, Math.floor((quest.progress / quest.target) * 10));
+        const bar = `${"▰".repeat(percent)}${"▱".repeat(10 - percent)}`;
+        container.addTextDisplayComponents(text => text.setContent(
+            `### ${quest.completed ? "✅" : "⏳"} ${quest.title}\n${quest.description}\n${bar} **${quest.progress}/${quest.target}**\n-# ${formatQuestReward(quest.reward)}`
+        ));
+    }
+    return {
+        components: [container.addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`quests:page:${user.id}:${currentPage - 1}:${expiresAt}`).setEmoji("⬅️").setStyle(ButtonStyle.Secondary).setDisabled(currentPage <= 1),
+                new ButtonBuilder().setCustomId(`quests:claim:${user.id}:${currentPage}:${expiresAt}`).setEmoji("🎁").setLabel(`Réclamer${claimable ? ` (${claimable})` : ""}`).setStyle(ButtonStyle.Success).setDisabled(!claimable),
+                new ButtonBuilder().setCustomId(`quests:page:${user.id}:${currentPage + 1}:${expiresAt}`).setEmoji("➡️").setStyle(ButtonStyle.Secondary).setDisabled(currentPage >= totalPages)
+            ))],
+        flags: MessageFlags.IsComponentsV2
+    };
+};
+
+const handleQuestButton = async (client, interaction) => {
+    const parts = interaction.customId.split(":");
+    if(parts.length !== 5 || parts[0] !== "quests") return false;
+    const [, action, userID, rawPage, rawExpires] = parts, page = Number(rawPage), expiresAt = Number(rawExpires);
+    if(interaction.user.id !== userID){ await interaction.reply({ content: "Ce panneau de quêtes ne t’appartient pas.", flags: MessageFlags.Ephemeral }); return true; }
+    if(Date.now() > expiresAt){
+        const componentLifecycle = require("./componentLifecycle");
+        await componentLifecycle.expireInteractedMessage(interaction, "quetes", interaction.commandId); return true;
+    }
+    if(action === "claim") await claimCompletedQuests(userID);
+    const newExpiresAt = Date.now() + 120000;
+    await interaction.update(await getQuestReply(interaction.user, page, newExpiresAt));
+    require("./componentLifecycle").scheduleInteractionExpiration(interaction, "quetes", newExpiresAt);
+    return true;
+};
+
+const formatQuestReward = reward => [
+    reward.money && `${reward.money}$`, reward.cardPoints && `${reward.cardPoints} points`, reward.xp && `${reward.xp} XP`,
+    reward.wheelTickets && `${reward.wheelTickets} ticket(s)`, reward.pickBoost && "Boost /pick"
+].filter(Boolean).join(" · ");
 
 const createWheelEmbed = (result) => {
     if(!result.ok){
@@ -336,5 +402,7 @@ module.exports = {
     createQuestEmbed,
     createClaimEmbed,
     createWheelEmbed,
-    getPickCooldownMultiplier
+    getPickCooldownMultiplier,
+    getQuestReply,
+    handleQuestButton
 };

@@ -46,13 +46,13 @@ const getActionRows = (mode, userID, page, totalPages, selectedCardID, expiresAt
     if(mode !== "card") actionRow.addComponents(
         new ButtonBuilder().setCustomId(customID(mode, userID, "confirm", page, selectedCardID, expiresAt))
             .setStyle(mode === "sell" ? ButtonStyle.Success : ButtonStyle.Danger)
-            .setLabel(mode === "sell" ? "Vendre" : "Défausser").setDisabled(!selectedCardID)
+            .setEmoji(mode === "sell" ? "💰" : "♻️").setLabel(mode === "sell" ? "Vendre" : "Défausser").setDisabled(!selectedCardID)
     );
     actionRow.addComponents(
         new ButtonBuilder().setCustomId(customID(mode, userID, "preview", page, selectedCardID, expiresAt))
-            .setStyle(ButtonStyle.Primary).setLabel("Aperçu").setDisabled(!selectedCardID),
+            .setStyle(ButtonStyle.Primary).setEmoji("🔍").setLabel("Aperçu").setDisabled(!selectedCardID),
         new ButtonBuilder().setCustomId(customID(mode, userID, "cancel", page, selectedCardID, expiresAt))
-            .setStyle(ButtonStyle.Danger).setLabel("Annuler")
+            .setStyle(ButtonStyle.Danger).setEmoji("✖️").setLabel("Annuler")
     );
     return [navigationRow, actionRow];
 };
@@ -82,11 +82,7 @@ const handleButton = async (client, interaction) => {
         if(!(await apiDB.doesUserOwnThisCard(parsed.selectedCardID, interaction.user.id))){
             await interaction.reply({ content: "Cette carte ne t’appartient plus.", flags: MessageFlags.Ephemeral }); return true;
         }
-        const expiresAt = componentLifecycle.createExpiresAt();
-        const reply = await getPickerReply(interaction.user, parsed.mode, parsed.page, parsed.selectedCardID, expiresAt);
-        reply.embeds = [await cardFunctions.getCardEmbed(client, parsed.selectedCardID)];
-        await interaction.update(reply);
-        componentLifecycle.scheduleInteractionExpiration(interaction, parsed.mode, expiresAt);
+        await interaction.reply({ embeds: [await cardFunctions.getCardEmbed(client, parsed.selectedCardID)], flags: MessageFlags.Ephemeral });
         return true;
     }
     if(parsed.action === "confirm"){

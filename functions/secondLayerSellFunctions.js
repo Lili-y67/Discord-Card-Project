@@ -37,11 +37,13 @@ const getSellConfirmationButtons = async (client, interaction, cardID) => {
 	.addComponents(
 		new ButtonBuilder()
 		.setCustomId(confirmButtonID)
+		.setEmoji('💰')
 		.setLabel('Confirmer')
 		.setStyle(ButtonStyle.Success),
 
 		new ButtonBuilder()
 			.setCustomId(cancelButtonID)
+			.setEmoji('✖️')
 			.setLabel('Annuler')
 			.setStyle(ButtonStyle.Danger),
 	);
@@ -62,11 +64,9 @@ const expirationFunction = async (client, oldInteraction, customDataDictionary) 
 const confirmSell = async (client, currentInteraction, oldInteraction, customDataDictionary) => {
 
     const soldCard = await apiDB.getACardFromID(customDataDictionary.cardID)
-	let givenMoney = await sellACard(customDataDictionary.cardID)
+	let sale = await sellACard(customDataDictionary.cardID)
 
-	let components = buttonCenter.disableEveryButtonInActionRow(currentInteraction.message.components[0])
-
-	await oldInteraction.editReply({embeds:[await cardFunctions.getCardEmbed(client, customDataDictionary.cardID) ,getSoldEmbed(givenMoney)], components:[components]})
+	await oldInteraction.editReply({embeds:[await cardFunctions.getCardEmbed(client, customDataDictionary.cardID) ,getSoldEmbed(sale)], components:[]})
     await questCore.trackEvent(soldCard.ownerID, "card_sold")
 	currentInteraction.deferUpdate()
 }
@@ -80,22 +80,24 @@ const cancelSell = async (client, currentInteraction, oldInteraction, customData
 
 const sellACard = async (cardID) => {
 	let card = await apiDB.getACardFromID(cardID)
-	let givenMoney = card.rarity == constants.GLITCHEDNAME ? Math.floor(Math.random()*(1+constants.MAXSELLPRICEGLITCHED-constants.MINSELLPRICEGLITCHED))+constants.MINSELLPRICEGLITCHED : constants.SELLPRICETABLE[card.rarity]
+	let basePrice = card.rarity == constants.GLITCHEDNAME ? Math.floor(Math.random()*(1+constants.MAXSELLPRICEGLITCHED-constants.MINSELLPRICEGLITCHED))+constants.MINSELLPRICEGLITCHED : constants.SELLPRICETABLE[card.rarity]
+	const investmentBonus = Math.random() < 0.10 ? Math.floor(Math.random() * 46) + 5 : 0
+	const givenMoney = basePrice + investmentBonus
 
 	await transactionFunctions.giveMoney(card.ownerID, givenMoney)
 	await apiDB.changeCardOwnership(cardID, constants.CLIENTID)
-	return givenMoney
+	return { givenMoney, basePrice, investmentBonus }
 }
 
 
 
-const getSoldEmbed = (soldPrice) => {
+const getSoldEmbed = (sale) => {
 	let sellConfirmationEmbed = new EmbedBuilder()
 	.setColor('#D72306')
 	.setTitle('Vente effectuée')
     .addFields({
 		name: `Votre carte a bien été vendue`,
-		value:`Vous avez obtenu ${soldPrice.toString()}$`
+		value:`Vous avez obtenu ${sale.givenMoney.toString()}$${sale.investmentBonus ? `\n🏦 **Investissement de la banque : +${sale.investmentBonus}$ !**` : ""}`
 	})
 	return sellConfirmationEmbed
 }

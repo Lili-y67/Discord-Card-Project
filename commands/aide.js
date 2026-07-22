@@ -31,10 +31,12 @@ const commandMentions = async (interaction) => {
     };
 
     try {
+        addCommands(await interaction.client.application.commands.fetch());
         if(interaction.guild){
+            // Une commande enregistrée sur le serveur doit primer sur son
+            // éventuelle version globale : son ID est celui que Discord attend ici.
             addCommands(await interaction.guild.commands.fetch());
         }
-        addCommands(await interaction.client.application.commands.fetch());
     } catch(error) {
         console.log('Impossible de récupérer les mentions des commandes pour /aide :', error);
     }
@@ -130,7 +132,7 @@ const helpPages = (cmd) => ({
         description: 'Progressez autrement que par les tirages.',
         fields: [
             { name: cmd('quetes'), value: 'Affiche les quêtes du jour, votre niveau de quête, vos tickets et les récompenses prêtes.' },
-            { name: cmd('quetes', 'action:reclamer'), value: 'Récupère les récompenses des quêtes terminées.' },
+            { name: 'Bouton Réclamer', value: `Le bouton de ${cmd('quetes')} récupère les récompenses terminées et débloque les paliers suivants.` },
             { name: cmd('roue'), value: 'Consomme un ticket pour tourner la roue fortune.' },
             { name: 'Exemples de progression', value: 'Messages envoyés, /pick réussi, /daily récupéré, vente, défausse, trade validé, rankup.' }
         ]

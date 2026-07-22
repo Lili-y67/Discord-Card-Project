@@ -210,7 +210,7 @@ const fillCardsCollection = (collection, distinctCardsList) => {
         if(!collection[cardData.playerID]){
             collection[cardData.playerID] = {}
         }
-        collection[cardData.playerID][cardData.rarity] = true
+        collection[cardData.playerID][cardData.rarity] = Math.max(1, Number(cardData.copies) || 1)
     })
     return collection
 }
@@ -245,11 +245,15 @@ const getEachRarityCardsNumbers = async (discordID) => {
 
 const getPlayerRarityStatusText = (playerCollection) => {
     const rarityStatusParts = constants.RARITIES.map(rarity => {
-        return `**${rarity.shortName}** ${playerCollection[rarity.name] ? HAS_MARK : HASNT_MARK}`
+        const copies = Number(playerCollection[rarity.name]) || 0;
+        return `**${rarity.shortName}** ${copies ? `${HAS_MARK}${getCopiesEmoji(copies)}` : HASNT_MARK}`
     })
     const splitIndex = Math.ceil(rarityStatusParts.length / 2)
     return `${rarityStatusParts.slice(0, splitIndex).join(" · ")}\n${rarityStatusParts.slice(splitIndex).join(" · ")}`
 }
+
+const COPY_EMOJIS = ["", "", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"];
+const getCopiesEmoji = copies => copies > 1 ? ` ${COPY_EMOJIS[Math.min(copies, 9)]}` : "";
 
 const getPlayerDisplay = (playerData) => {
     const name = mentionSafety.escapeMarkdown(playerData?.playerName || `Joueur ${playerData?.playerID ?? "?"}`)

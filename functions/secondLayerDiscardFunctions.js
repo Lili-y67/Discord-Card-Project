@@ -37,11 +37,13 @@ const getDiscardConfirmationButtons = async (client, interaction, cardID) => {
 	.addComponents(
 		new ButtonBuilder()
 		.setCustomId(confirmButtonID)
+		.setEmoji('♻️')
 		.setLabel('Confirmer')
 		.setStyle(ButtonStyle.Success),
 
 		new ButtonBuilder()
 			.setCustomId(cancelButtonID)
+			.setEmoji('✖️')
 			.setLabel('Annuler')
 			.setStyle(ButtonStyle.Danger),
 	);
@@ -63,8 +65,7 @@ const confirmDiscard = async (client, currentInteraction, oldInteraction, custom
 
 	const discardedCard = await apiDB.getACardFromID(customDataDictionary.cardID)
 	let givenPoints = await discardACard(customDataDictionary.cardID)
-	let components = buttonCenter.disableEveryButtonInActionRow(currentInteraction.message.components[0])
-	await oldInteraction.editReply({embeds:[await cardFunctions.getCardEmbed(client, customDataDictionary.cardID),getDiscardedEmbed(givenPoints)], components:[components]})
+	await oldInteraction.editReply({embeds:[await cardFunctions.getCardEmbed(client, customDataDictionary.cardID),getDiscardedEmbed(givenPoints)], components:[]})
 	await questCore.trackEvent(discardedCard.ownerID, "card_discarded")
 	currentInteraction.deferUpdate()
 }
@@ -116,4 +117,3 @@ module.exports = {
     getConfirmationDiscardEmbed,
 	getDiscardConfirmationButtons
 };
-
