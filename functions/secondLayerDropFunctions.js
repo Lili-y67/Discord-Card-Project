@@ -22,6 +22,9 @@ const getDropReply = async drop => {
 const getDropContainer = (drop, claims = [], playerData = null) => {
     const expired = drop.status === "expired" || Date.now() >= Number(drop.expiresAt);
     const complete = claims.length >= drop.maxWinners || drop.status === "complete";
+    const expirationText = expired || complete
+        ? "-# ⏱️ Drop terminé"
+        : `-# ⏱️ Fin <t:${Math.floor(Number(drop.expiresAt) / 1000)}:R>`;
     const playerDisplay = /^\d{17,20}$/.test(playerData?.discordID || "")
         ? `<@${playerData.discordID}>`
         : mentionSafety.escapeMarkdown(playerData?.playerName || `Joueur ${drop.playerID}`);
@@ -44,7 +47,7 @@ const getDropContainer = (drop, claims = [], playerData = null) => {
             .setDisabled(expired)
     );
     return new ContainerBuilder().setAccentColor(complete ? 0x39B54A : ACCENT_COLOR)
-        .addTextDisplayComponents(text => text.setContent(`## ${drop.title || "🎁 Un drop est disponible !"}\n${drop.description || "Réclamez la récompense avant la fin du temps imparti."}`))
+        .addTextDisplayComponents(text => text.setContent(`## ${drop.title || "🎁 Un drop est disponible !"}\n${drop.description || "Réclamez la récompense avant la fin du temps imparti."}\n${expirationText}`))
         .addSeparatorComponents(new SeparatorBuilder())
         .addTextDisplayComponents(text => text.setContent(`${complete ? "🎉 **Drop terminé — GG aux gagnants !**\n\n" : expired ? "⏱️ **Fin du drop !**\n\n" : ""}${reward}\n\n**Gagnants (${claims.length}/${drop.maxWinners})**\n${winners}`))
         .addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(actionRow);

@@ -56,6 +56,7 @@ const getProfileReply = async (profileUser, requestedByUser, expiresAt = compone
 const generateProfileImage = async (user, data, background) => {
     const canvas = Canvas.createCanvas(1100, 460);
     const ctx = canvas.getContext("2d");
+    const imageBackground = ["custom", "discord"].includes(background);
     await drawBackground(ctx, canvas.width, canvas.height, background, user);
     ctx.globalAlpha = 0.12; ctx.fillStyle = "#ffffff";
     ctx.beginPath(); ctx.arc(1060, -30, 260, 0, Math.PI * 2); ctx.fill();
@@ -74,10 +75,10 @@ const generateProfileImage = async (user, data, background) => {
     ctx.fillStyle = "#ff9b54"; ctx.font = "600 23px Arial"; ctx.fillText(data.rank.toUpperCase(), 45, 405);
     ctx.fillStyle = "#e4ccff"; ctx.font = "600 18px Arial";
     ctx.fillText(`QUÊTES NIV. ${data.questLevel} · ${data.questXP}/${data.questNextXP} XP`, 45, 438);
-    drawStat(ctx, 380, 95, "SOLDE", `${data.money.toLocaleString("fr-FR")}$`, "#ffb35c");
-    drawStat(ctx, 720, 95, "POINTS", data.points.toLocaleString("fr-FR"), "#c997ff");
-    drawStat(ctx, 380, 255, "CARTES PICK", data.picked.toLocaleString("fr-FR"), "#62c8ff");
-    drawStat(ctx, 720, 255, "CARTES POSSÉDÉES", data.owned.toLocaleString("fr-FR"), "#7ce5a1");
+    drawStat(ctx, 380, 95, "SOLDE", `${data.money.toLocaleString("fr-FR")}$`, "#ffb35c", imageBackground);
+    drawStat(ctx, 720, 95, "POINTS", data.points.toLocaleString("fr-FR"), "#c997ff", imageBackground);
+    drawStat(ctx, 380, 255, "CARTES PICK", data.picked.toLocaleString("fr-FR"), "#62c8ff", imageBackground);
+    drawStat(ctx, 720, 255, "CARTES POSSÉDÉES", data.owned.toLocaleString("fr-FR"), "#7ce5a1", imageBackground);
     return canvas.toBuffer("image/png");
 };
 
@@ -121,10 +122,16 @@ const drawImageCover = (ctx, image, x, y, width, height) => {
     const drawWidth = image.width * scale, drawHeight = image.height * scale;
     ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
 };
-const drawStat = (ctx, x, y, label, value, color) => {
-    ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.beginPath(); ctx.roundRect(x, y, 300, 120, 20); ctx.fill();
+const drawStat = (ctx, x, y, label, value, color, transparent = false) => {
+    if(!transparent){
+        ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.beginPath(); ctx.roundRect(x, y, 300, 120, 20); ctx.fill();
+    }
+    ctx.shadowColor = transparent ? "rgba(0,0,0,0.95)" : "transparent";
+    ctx.shadowBlur = transparent ? 8 : 0;
+    ctx.shadowOffsetY = transparent ? 2 : 0;
     ctx.fillStyle = color; ctx.font = "700 19px Arial"; ctx.fillText(label, x + 24, y + 35);
     ctx.fillStyle = "#ffffff"; ctx.font = "700 40px Arial"; ctx.fillText(value, x + 24, y + 88);
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 };
 const truncate = (ctx, text, width) => { let result = text; while(result.length > 1 && ctx.measureText(result).width > width) result = `${result.slice(0, -2)}…`; return result; };
 const getRenderableProfileName = user => {

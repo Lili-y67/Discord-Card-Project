@@ -42,6 +42,10 @@ const getActionRows = (mode, userID, page, totalPages, selectedCardID, expiresAt
         new ButtonBuilder().setCustomId(customID(mode, userID, "page", page, 0, expiresAt)).setStyle(ButtonStyle.Secondary).setLabel(`${page}/${totalPages}`).setDisabled(true),
         new ButtonBuilder().setCustomId(customID(mode, userID, "next", page + 1, 0, expiresAt)).setStyle(ButtonStyle.Secondary).setEmoji("➡️").setDisabled(page >= totalPages)
     );
+    // En mode /card, choisir une option affiche déjà la carte. Les boutons
+    // "Aperçu" et "Annuler" n'apportaient donc aucune action supplémentaire.
+    if(mode === "card") return [navigationRow];
+
     const actionRow = new ActionRowBuilder();
     if(mode !== "card") actionRow.addComponents(
         new ButtonBuilder().setCustomId(customID(mode, userID, "confirm", page, selectedCardID, expiresAt))
@@ -61,7 +65,21 @@ const handleSelect = async (client, interaction) => {
     const parsed = parse(interaction.customId);
     if(!parsed || parsed.action !== "select") return false;
     if(!(await canUse(interaction, parsed))) return true;
-    await refresh(interaction, parsed.mode, parsed.page, Number(interaction.values[0]));
+    const selectedCardID = Number(interaction.values[0]);
+    if(parsed.mode === "card"){
+        if(!(await apiDB.doesUserOwnThisCard(selectedCardID, interaction.user.id))){
+            await refresh(interaction, parsed.mode, parsed.page, 0);
+            await interaction.followUp({ content: "Cette carte ne t’appartient plus.", flags: MessageFlags.Ephemeral });
+            return true;
+        }
+
+        // Reconstruire le sélecteur sans option par défaut le remet dans son
+        // état initial, puis la carte choisie est affichée immédiatement.
+        await refresh(interaction, parsed.mode, parsed.page, 0);
+        await interaction.followUp(await cardFunctions.getCardReply(client, selectedCardID, interaction.user, true));
+        return true;
+    }
+    await refresh(interaction, parsed.mode, parsed.page, selectedCardID);
     return true;
 };
 

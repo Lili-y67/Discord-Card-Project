@@ -189,7 +189,10 @@ const handleTopButton = async (client, interaction) => {
     if(parsedInteraction.action == "page"){
         const user = await client.users.fetch(parsedInteraction.userID);
         const expiresAt = componentLifecycle.createExpiresAt();
-        await interaction.update(await getTopReply(user, parsedInteraction.type, parsedInteraction.page, expiresAt));
+        // Le nouveau canvas et les avatars peuvent dépasser la fenêtre de
+        // réponse Discord, y compris lors d'un changement de page.
+        await interaction.deferUpdate();
+        await interaction.editReply(await getTopReply(user, parsedInteraction.type, parsedInteraction.page, expiresAt));
         componentLifecycle.scheduleInteractionExpiration(interaction, "top", expiresAt);
         return true;
     }

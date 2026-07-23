@@ -23,7 +23,10 @@ module.exports = {
         const type = interaction.options.getString("type", true);
         const page = 1;
         const expiresAt = componentLifecycle.createExpiresAt();
-        await interaction.reply(await topFunctions.getTopReply(interaction.user, type, page, expiresAt));
+        // La base, les avatars Discord et le canvas peuvent prendre plus de trois
+        // secondes : acquitter immédiatement l'interaction évite l'erreur 10062.
+        await interaction.deferReply();
+        await interaction.editReply(await topFunctions.getTopReply(interaction.user, type, page, expiresAt));
         componentLifecycle.scheduleInteractionExpiration(interaction, "top", expiresAt);
     },
 };
