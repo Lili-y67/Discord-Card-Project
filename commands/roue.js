@@ -27,6 +27,19 @@ module.exports = {
         await interaction.deferReply();
         await apiDB.ensureDatabaseSchema();
         await apiDB.prepareUser(interaction.user.id, interaction.user.username);
+        await apiDB.prepareQuestUser(interaction.user.id);
+
+        const questStats = await apiDB.getQuestUserStats(interaction.user.id);
+        if(Number(questStats?.wheelTickets) <= 0){
+            await interaction.editReply(mentionSafety.withSafeMentions({
+                components: [new ContainerBuilder().setAccentColor(0xD72306)
+                    .addTextDisplayComponents(text => text.setContent(
+                        "## 🎡 Roue de la fortune\nTu n’as pas de ticket. Termine des quêtes pour en gagner."
+                    ))],
+                flags: MessageFlags.IsComponentsV2
+            }));
+            return;
+        }
 
         const expiresAt = componentLifecycle.createExpiresAt();
         const geometry = wheelCanvas.getGeometry(questCore.WHEEL_REWARDS);
