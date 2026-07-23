@@ -16,6 +16,18 @@ const componentLifecycle = require("../functions/componentLifecycle");
 const mentionSafety = require("../functions/mentionSafety");
 const questCore = require("../functions/questCore");
 const wheelCanvas = require("../functions/wheelCanvas");
+const activeSpins = new Set();
+
+const isClosedInteractionError = error => [10062, 40060].includes(Number(error?.code));
+const safelyReply = async (interaction, payload) => {
+    try {
+        await interaction.reply(payload);
+        return true;
+    } catch(error) {
+        if(isClosedInteractionError(error)) return false;
+        throw error;
+    }
+};
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -76,57 +88,77 @@ module.exports = {
         const userID = parts[2];
         const expiresAt = Number(parts[3]);
         if(interaction.user.id !== userID){
-            await interaction.reply({ content: "Cette roue ne t’appartient pas.", flags: MessageFlags.Ephemeral });
+            await safelyReply(interaction, { content: "Cette roue ne t’appartient pas.", flags: MessageFlags.Ephemeral });
             return true;
         }
         if(componentLifecycle.isExpired(expiresAt)){
-            await componentLifecycle.expireInteractedMessage(interaction, "roue", interaction.commandId);
+            try {
+                await componentLifecycle.expireInteractedMessage(interaction, "roue", interaction.commandId);
+            } catch(error) {
+                if(!isClosedInteractionError(error)) throw error;
+            }
+            return true;
+        }
+        if(activeSpins.has(userID)){
+            await safelyReply(interaction, { content: "Ta roue est déjà en train de tourner.", flags: MessageFlags.Ephemeral });
             return true;
         }
 
-        await interaction.deferUpdate();
-        const result = await questCore.spinWheel(interaction.user.id);
-        if(!result.ok){
+        activeSpins.add(userID);
+        try {
+            await interaction.deferUpdate();
+        } catch(error) {
+            activeSpins.delete(userID);
+            if(isClosedInteractionError(error)) return true;
+            throw error;
+        }
+
+        try {
+            const result = await questCore.spinWheel(interaction.user.id);
+            if(!result.ok){
+                await interaction.editReply(mentionSafety.withSafeMentions({
+                    components: [new ContainerBuilder().setAccentColor(0xD72306)
+                        .addTextDisplayComponents(text => text.setContent(
+                            "## 🎡 Roue de la fortune\nTu n’as pas de ticket. Termine des quêtes pour en gagner."
+                        ))],
+                    attachments: [],
+                    flags: MessageFlags.IsComponentsV2
+                }));
+                return true;
+            }
+
+            const animation = wheelCanvas.generateWheelAnimation(questCore.WHEEL_REWARDS, result.selectedIndex);
+            const fileName = `roue-${interaction.user.id}.gif`;
+            const spinningContainer = new ContainerBuilder().setAccentColor(0xF4C542)
+                .addTextDisplayComponents(text => text.setContent(`## 🎡 Roue de la fortune\nLa roue de <@${interaction.user.id}> tourne…`))
+                .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+                    new MediaGalleryItemBuilder().setURL(`attachment://${fileName}`).setDescription("Roue de la fortune animée")
+                ));
             await interaction.editReply(mentionSafety.withSafeMentions({
-                components: [new ContainerBuilder().setAccentColor(0xD72306)
-                    .addTextDisplayComponents(text => text.setContent(
-                        "## 🎡 Roue de la fortune\nTu n’as pas de ticket. Termine des quêtes pour en gagner."
-                    ))],
+                components: [spinningContainer],
                 attachments: [],
+                files: [new AttachmentBuilder(animation, { name: fileName })],
+                flags: MessageFlags.IsComponentsV2
+            }));
+
+            await new Promise(resolve => setTimeout(resolve, wheelCanvas.WHEEL_ANIMATION_DURATION_MS));
+
+            const resultContainer = new ContainerBuilder().setAccentColor(0xF4C542)
+                .addTextDisplayComponents(text => text.setContent(`## 🎡 Roue de la fortune\nLa roue de <@${interaction.user.id}> s’est arrêtée !`))
+                .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+                    new MediaGalleryItemBuilder().setURL(`attachment://${fileName}`).setDescription("Résultat de la roue")
+                ))
+                .addSeparatorComponents(new SeparatorBuilder())
+                .addTextDisplayComponents(text => text.setContent(
+                    `### 🎉 Résultat\n||**${result.label}**\n${questCore.formatRewardSummary(result.rewards, result.levelResult)}||`
+                ));
+            await interaction.editReply(mentionSafety.withSafeMentions({
+                components: [resultContainer],
                 flags: MessageFlags.IsComponentsV2
             }));
             return true;
+        } finally {
+            activeSpins.delete(userID);
         }
-
-        const animation = wheelCanvas.generateWheelAnimation(questCore.WHEEL_REWARDS, result.selectedIndex);
-        const fileName = `roue-${interaction.user.id}.gif`;
-        const spinningContainer = new ContainerBuilder().setAccentColor(0xF4C542)
-            .addTextDisplayComponents(text => text.setContent(`## 🎡 Roue de la fortune\nLa roue de <@${interaction.user.id}> tourne…`))
-            .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(`attachment://${fileName}`).setDescription("Roue de la fortune animée")
-            ));
-        await interaction.editReply(mentionSafety.withSafeMentions({
-            components: [spinningContainer],
-            attachments: [],
-            files: [new AttachmentBuilder(animation, { name: fileName })],
-            flags: MessageFlags.IsComponentsV2
-        }));
-
-        await new Promise(resolve => setTimeout(resolve, wheelCanvas.WHEEL_ANIMATION_DURATION_MS));
-
-        const resultContainer = new ContainerBuilder().setAccentColor(0xF4C542)
-            .addTextDisplayComponents(text => text.setContent(`## 🎡 Roue de la fortune\nLa roue de <@${interaction.user.id}> s’est arrêtée !`))
-            .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(`attachment://${fileName}`).setDescription("Résultat de la roue")
-            ))
-            .addSeparatorComponents(new SeparatorBuilder())
-            .addTextDisplayComponents(text => text.setContent(
-                `### 🎉 Résultat\n||**${result.label}**\n${questCore.formatRewardSummary(result.rewards, result.levelResult)}||`
-            ));
-        await interaction.editReply(mentionSafety.withSafeMentions({
-            components: [resultContainer],
-            flags: MessageFlags.IsComponentsV2
-        }));
-        return true;
     }
 };

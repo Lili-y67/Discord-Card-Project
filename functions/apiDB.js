@@ -592,8 +592,10 @@ const addMoneyToUser = async (discordID, amount) => {
 }
 
 const subMoneyToUser = async (discordID, amount) => {
-    let subMoneyToUserQuery = `UPDATE ${usersDataTB} SET 'money' = money - ${amount} WHERE discordID = '${discordID.toString()}'`
-    await DB.run(subMoneyToUserQuery)
+    await DB.run(
+        `UPDATE ${usersDataTB} SET money = MAX(money - ?, 0) WHERE discordID = ?`,
+        [Math.max(0, Number(amount) || 0), discordID.toString()]
+    )
 }
 
 const setMoneyForUser = async (discordID, money) => {
@@ -626,8 +628,10 @@ const addPointsToUser = async (discordID, amount) => {
 }
 
 const subPointsToUser = async (discordID, amount) => {
-    let subPointsToUserQuery = `UPDATE ${usersDataTB} SET 'cardPoints' = cardPoints - ${amount} WHERE discordID = '${discordID.toString()}'`
-    await DB.run(subPointsToUserQuery)
+    await DB.run(
+        `UPDATE ${usersDataTB} SET cardPoints = MAX(cardPoints - ?, 0) WHERE discordID = ?`,
+        [Math.max(0, Number(amount) || 0), discordID.toString()]
+    )
 }
 
 const getCardPointsOfUser = async (discordID) => {

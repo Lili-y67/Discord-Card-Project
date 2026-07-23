@@ -151,6 +151,9 @@ client.on('interactionCreate', async interaction => {
 		if(await client.commands.get("give")?.handleGiveModal?.(client, interaction)){
 			return;
 		}
+		if(await client.commands.get("ungive")?.handleUngiveModal?.(client, interaction)){
+			return;
+		}
 		if(await profileFunctions.handleProfileModal(client, interaction)){
 			return;
 		}
@@ -163,7 +166,15 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	if(interaction.isButton()){
-		if(await client.commands.get("roue")?.handleButton?.(client, interaction)){
+		try {
+			if(await client.commands.get("roue")?.handleButton?.(client, interaction)){
+				return;
+			}
+		} catch(error) {
+			console.error("Erreur pendant une interaction de roue :", error);
+			if(!interaction.replied && !interaction.deferred){
+				await interaction.reply({ content: "La roue n’a pas pu être lancée.", ephemeral: true }).catch(() => {});
+			}
 			return;
 		}
 		if(await questCore.handleQuestButton(client, interaction)){
