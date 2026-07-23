@@ -100,19 +100,31 @@ module.exports = {
 
         const animation = wheelCanvas.generateWheelAnimation(questCore.WHEEL_REWARDS, result.selectedIndex);
         const fileName = `roue-${interaction.user.id}.gif`;
-        const container = new ContainerBuilder().setAccentColor(0xF4C542)
-            .addTextDisplayComponents(text => text.setContent(`## 🎡 Roue de la fortune\nLa roue de <@${interaction.user.id}> est lancée !`))
+        const spinningContainer = new ContainerBuilder().setAccentColor(0xF4C542)
+            .addTextDisplayComponents(text => text.setContent(`## 🎡 Roue de la fortune\nLa roue de <@${interaction.user.id}> tourne…`))
             .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
                 new MediaGalleryItemBuilder().setURL(`attachment://${fileName}`).setDescription("Roue de la fortune animée")
+            ));
+        await interaction.editReply(mentionSafety.withSafeMentions({
+            components: [spinningContainer],
+            attachments: [],
+            files: [new AttachmentBuilder(animation, { name: fileName })],
+            flags: MessageFlags.IsComponentsV2
+        }));
+
+        await new Promise(resolve => setTimeout(resolve, wheelCanvas.WHEEL_ANIMATION_DURATION_MS));
+
+        const resultContainer = new ContainerBuilder().setAccentColor(0xF4C542)
+            .addTextDisplayComponents(text => text.setContent(`## 🎡 Roue de la fortune\nLa roue de <@${interaction.user.id}> s’est arrêtée !`))
+            .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(`attachment://${fileName}`).setDescription("Résultat de la roue")
             ))
             .addSeparatorComponents(new SeparatorBuilder())
             .addTextDisplayComponents(text => text.setContent(
                 `### 🎉 Résultat\n||**${result.label}**\n${questCore.formatRewardSummary(result.rewards, result.levelResult)}||`
             ));
         await interaction.editReply(mentionSafety.withSafeMentions({
-            components: [container],
-            attachments: [],
-            files: [new AttachmentBuilder(animation, { name: fileName })],
+            components: [resultContainer],
             flags: MessageFlags.IsComponentsV2
         }));
         return true;

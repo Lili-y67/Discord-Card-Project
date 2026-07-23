@@ -6,6 +6,10 @@ const CENTER = SIZE / 2;
 const RADIUS = 270;
 const OUTER_RADIUS = 322;
 const INNER_RADIUS = 78;
+const FRAME_COUNT = 46;
+const getFrameDelay = frame => frame < 28 ? 70 : 80 + (frame - 28) * 20;
+const WHEEL_ANIMATION_DURATION_MS = Array.from({ length: FRAME_COUNT }, (_, frame) => getFrameDelay(frame))
+    .reduce((total, delay) => total + delay, 0);
 
 const generateWheelAnimation = (rewards, selectedIndex) => {
     const encoder = new GIFEncoder(SIZE, SIZE, "neuquant", true, 20);
@@ -16,13 +20,12 @@ const generateWheelAnimation = (rewards, selectedIndex) => {
     const geometry = getGeometry(rewards);
     const selected = geometry[selectedIndex];
     const targetRotation = Math.PI * 2 * 5 - Math.PI / 2 - (selected.start + selected.end) / 2;
-    const frameCount = 38;
-    for(let frame = 0; frame < frameCount; frame++){
-        const progress = frame / (frameCount - 1);
+    for(let frame = 0; frame < FRAME_COUNT; frame++){
+        const progress = frame / (FRAME_COUNT - 1);
         const eased = 1 - Math.pow(1 - progress, 4);
         const rotation = targetRotation * eased;
         const canvas = drawWheelFrame(rewards, geometry, rotation, selectedIndex, progress === 1);
-        encoder.setDelay(frame < 25 ? 55 : 55 + (frame - 24) * 18);
+        encoder.setDelay(getFrameDelay(frame));
         encoder.addFrame(canvas.getContext("2d"));
     }
     encoder.finish();
@@ -225,4 +228,4 @@ const shiftColor = (hex, amount) => {
 const lighten = (hex, amount) => shiftColor(hex, amount);
 const darken = (hex, amount) => shiftColor(hex, -amount);
 
-module.exports = { generateWheelAnimation, drawWheelFrame, getGeometry };
+module.exports = { WHEEL_ANIMATION_DURATION_MS, generateWheelAnimation, drawWheelFrame, getGeometry };
