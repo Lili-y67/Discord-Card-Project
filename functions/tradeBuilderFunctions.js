@@ -1,5 +1,5 @@
 const crypto = require("node:crypto");
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, SeparatorBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require("discord.js");
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags, SeparatorBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require("discord.js");
 const apiDB = require("./apiDB");
 const questCore = require("./questCore");
 const transactionFunctions = require("./secondLayerTransactionFunctions");
@@ -7,6 +7,7 @@ const componentLifecycle = require("./componentLifecycle");
 const mentionSafety = require("./mentionSafety");
 
 const PAGE_SIZE = 10;
+const TRADE_LIFETIME_MS = 5 * 60 * 1000;
 const states = new Map();
 
 const createTrade = async (interaction, partner, proposedMoney = 0, askedMoney = 0) => {
@@ -16,7 +17,7 @@ const createTrade = async (interaction, partner, proposedMoney = 0, askedMoney =
         ownerName: interaction.user.username, partnerName: partner.username,
         payer, amount: Math.abs(proposedMoney - askedMoney), ownCards: [], partnerCards: [],
         ownPage: 1, partnerPage: 1, status: "building", locked: false,
-        expiresAt: componentLifecycle.createExpiresAt(), rootInteraction: interaction, guildID: interaction.guildId
+        expiresAt: Date.now() + TRADE_LIFETIME_MS, rootInteraction: interaction, guildID: interaction.guildId
     };
     states.set(state.id, state);
     return state;
@@ -34,6 +35,7 @@ const getContainer = async state => {
         .addTextDisplayComponents(text => text.setContent(`## Échange avec <@${state.partnerID}>\nSélectionne jusqu’à **10 cartes par côté**.`))
         .addSeparatorComponents(new SeparatorBuilder())
         .addTextDisplayComponents(text => text.setContent(summary(state, ownInventory, partnerInventory)));
+    addPreviewButtons(container, state);
     addInventoryControls(container, state, "own", ownInventory);
     container.addSeparatorComponents(new SeparatorBuilder());
     addInventoryControls(container, state, "partner", partnerInventory);
@@ -78,6 +80,15 @@ const summary = (state, ownInventory, partnerInventory) => {
     return `**Tu proposes :** ${lines(state.ownCards)}\n**Tu demandes :** ${lines(state.partnerCards)}\n**Argent :** ${money}`;
 };
 
+const addPreviewButtons = (container, state) => container.addActionRowComponents(
+    new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(id(state, "viewown")).setStyle(ButtonStyle.Secondary)
+            .setEmoji("🖼️").setLabel(`Voir les cartes de ${state.ownerName}`.slice(0, 80)).setDisabled(!state.ownCards.length),
+        new ButtonBuilder().setCustomId(id(state, "viewpartner")).setStyle(ButtonStyle.Secondary)
+            .setEmoji("🖼️").setLabel(`Voir les cartes de ${state.partnerName}`.slice(0, 80)).setDisabled(!state.partnerCards.length)
+    )
+);
+
 const getFinalContainer = state => {
     const completed = state.status === "done", canceled = state.status === "canceled" || state.status === "expired";
     const title = completed ? "## ✅ Échange effectué" : canceled ? `## ${state.status === "expired" ? "⌛ Échange expiré" : "❌ Échange annulé"}` : "## 🤝 Proposition d’échange";
@@ -85,9 +96,10 @@ const getFinalContainer = state => {
         .addTextDisplayComponents(text => text.setContent(`${title}\n<@${state.ownerID}> ↔ <@${state.partnerID}>`))
         .addSeparatorComponents(new SeparatorBuilder())
         .addTextDisplayComponents(text => text.setContent(`**Cartes proposées :** ${state.ownCards.length ? state.ownCards.map(id => `#${id}`).join(", ") : "Aucune"}\n**Cartes demandées :** ${state.partnerCards.length ? state.partnerCards.map(id => `#${id}`).join(", ") : "Aucune"}\n**Argent :** ${state.payer === "owner" ? `${state.ownerName} donne ${state.amount}$` : state.payer === "partner" ? `${state.partnerName} donne ${state.amount}$` : "Aucun"}`));
+    if(state.status === "pending" && (state.ownCards.length || state.partnerCards.length)) addPreviewButtons(container, state);
     if(state.status === "pending") container.addSeparatorComponents(new SeparatorBuilder()).addActionRowComponents(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(id(state, "accept")).setStyle(ButtonStyle.Success).setLabel("Accepter"),
-        new ButtonBuilder().setCustomId(id(state, "cancel")).setStyle(ButtonStyle.Danger).setLabel("Refuser / Annuler")
+        new ButtonBuilder().setCustomId(id(state, "accept")).setStyle(ButtonStyle.Success).setEmoji("✅").setLabel("Accepter l’échange"),
+        new ButtonBuilder().setCustomId(id(state, "cancel")).setStyle(ButtonStyle.Danger).setEmoji("❌").setLabel("Refuser l’échange")
     ));
     return container;
 };
@@ -109,6 +121,7 @@ const handleSelect = async (client, interaction) => {
 const handleButton = async (client, interaction) => {
     const parsed = parse(interaction.customId); if(!parsed || parsed.action.endsWith("select")) return false;
     const state = states.get(parsed.stateID); if(!state){ await interaction.reply({ content: "Cet échange a expiré.", flags: MessageFlags.Ephemeral }); return true; }
+    if(parsed.action === "viewown" || parsed.action === "viewpartner") return await showSelectedCards(interaction, state, parsed.action === "viewown" ? "own" : "partner");
     if(parsed.action === "accept") return await accept(interaction, state);
     if(parsed.action === "cancel") return await cancel(interaction, state);
     if(!(await authorize(interaction, state, true))) return true;
@@ -140,16 +153,50 @@ const accept = async (interaction, state) => {
 };
 
 const cancel = async (interaction, state) => {
-    if(![state.ownerID, state.partnerID].includes(interaction.user.id)){ await interaction.reply({ content: "Tu ne participes pas à cet échange.", flags: MessageFlags.Ephemeral }); return true; }
+    const allowedUserID = state.status === "pending" ? state.partnerID : state.ownerID;
+    if(interaction.user.id !== allowedUserID){
+        const message = state.status === "pending"
+            ? "Seul le membre qui a reçu l’échange peut le refuser."
+            : "Seul l’auteur peut annuler la préparation de cet échange.";
+        await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
+        return true;
+    }
     await unlock(state); state.status = "canceled"; await interaction.update(await getReply(state)); states.delete(state.id); return true;
+};
+const showSelectedCards = async (interaction, state, side) => {
+    if(![state.ownerID, state.partnerID].includes(interaction.user.id)){
+        await interaction.reply({ content: "Tu ne participes pas à cet échange.", flags: MessageFlags.Ephemeral });
+        return true;
+    }
+    if(Date.now() > state.expiresAt){
+        await interaction.reply({ content: "Cet échange a expiré.", flags: MessageFlags.Ephemeral });
+        return true;
+    }
+    const cardIDs = side === "own" ? state.ownCards : state.partnerCards;
+    const ownerName = side === "own" ? state.ownerName : state.partnerName;
+    const cards = (await Promise.all(cardIDs.map(cardID => apiDB.getACardFromID(cardID)))).filter(Boolean);
+    const details = cards.map(card =>
+        `**#${card.cardID}** · ${mentionSafety.escapeMarkdown(card.playerData?.playerName || `Joueur ${card.playerID}`)} · ${mentionSafety.escapeMarkdown(card.rarity)}`
+    ).join("\n") || "Aucune carte sélectionnée.";
+    const container = new ContainerBuilder().setAccentColor(0xF6A700)
+        .addTextDisplayComponents(text => text.setContent(`## 🖼️ Cartes de ${mentionSafety.escapeMarkdown(ownerName)}\n${details}`));
+    const images = cards.filter(card => card.imageURL).map(card =>
+        new MediaGalleryItemBuilder().setURL(card.imageURL).setDescription(`Carte #${card.cardID}`)
+    );
+    if(images.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(images));
+    await interaction.reply(mentionSafety.withSafeMentions({
+        components: [container],
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+    }));
+    return true;
 };
 const validateOwnership = async state => (!state.ownCards.length || await ownsAll(state.ownCards, state.ownerID)) && (!state.partnerCards.length || await ownsAll(state.partnerCards, state.partnerID));
 const ownsAll = async (ids, owner) => { const owned = new Set((await apiDB.getCardsFromOwnerID(owner)).map(card => card.cardID)); return ids.every(id => owned.has(id)); };
 const unlock = async state => { if(!state.locked) return; if(state.ownCards.length) await apiDB.bulkUnlock(state.ownCards); if(state.partnerCards.length) await apiDB.bulkUnlock(state.partnerCards); state.locked = false; };
 const authorize = async (interaction, state, ownerOnly) => { if(!state || Date.now() > state.expiresAt){ await interaction.reply({ content: "Cet échange a expiré.", flags: MessageFlags.Ephemeral }); return false; } if(!ownerOnly || interaction.user.id === state.ownerID) return true; await interaction.reply({ content: "Seul l’auteur configure cet échange.", flags: MessageFlags.Ephemeral }); return false; };
-const refresh = async (interaction, state) => { state.expiresAt = componentLifecycle.createExpiresAt(); await interaction.update(await getReply(state)); schedule(state); };
+const refresh = async (interaction, state) => { await interaction.update(await getReply(state)); };
 const schedule = state => { const token = state.expiresAt; setTimeout(async()=>{ if(!states.has(state.id) || state.expiresAt !== token) return; await apiDB.withGuild(state.guildID, async()=>{ await unlock(state); state.status="expired"; try{ await state.rootInteraction.editReply(await getReply(state)); }catch{} states.delete(state.id); }); }, Math.max(token-Date.now(),0)); };
 const id = (state, action) => `tradebuild:${state.id}:${action}`;
 const parse = value => { const p=value.split(":"); return p.length===3&&p[0]==="tradebuild"?{stateID:p[1],action:p[2]}:null; };
 
-module.exports = { createTrade, getReply, handleSelect, handleButton, schedule };
+module.exports = { TRADE_LIFETIME_MS, createTrade, getReply, handleSelect, handleButton, schedule };

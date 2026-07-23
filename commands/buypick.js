@@ -29,7 +29,7 @@ module.exports = {
 			await interaction.editReply(buyPick.error)
 			return;
 		}
-        await questCore.trackEvent(interaction.user.id, "card_picked")
+        await questCore.trackCardPick(interaction.user.id, buyPick.cardID)
         await interaction.editReply(await pickFunctions.getPickReply(interaction.client, interaction.user, buyPick.cardID, buyPick.balanceChange))
 	},
 };

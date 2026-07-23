@@ -102,7 +102,7 @@ const helpPages = (cmd) => ({
             { name: cmd('profil'), value: 'Affiche votre solde, vos points de carte et votre rang. Ajoutez `user` pour voir un autre membre.' },
             { name: cmd('pay', 'user:<membre> amount:<montant>'), value: 'Transfère de l’argent à un autre membre.' },
             { name: cmd('rankup'), value: 'Passe au rang suivant si vous avez assez d’argent et de points.' },
-            { name: cmd('top', 'type:<classement>'), value: 'Affiche les classements des cartes, de l’argent, des points, des picks ou des dailies.' }
+            { name: cmd('top'), value: 'Ouvre un menu privé pour consulter les classements des cartes, de l’argent, des points, des picks ou des dailies.' }
         ]
     },
     echanges: {
@@ -120,8 +120,8 @@ const helpPages = (cmd) => ({
         title: 'Classements',
         description: 'Comparez votre progression avec celle des autres membres.',
         fields: [
-            { name: cmd('top', 'type:Argent'), value: 'Classement des membres selon leur argent. Les boutons permettent de changer de page.' },
-            { name: cmd('top', 'type:Points'), value: `Classement selon les points de carte obtenus avec ${cmd('discard')}. Les cartes possédées, picks et dailies sont aussi disponibles.` },
+            { name: cmd('top'), value: 'Choisissez Argent, Points, Cartes possédées, Picks ou Dailies dans le menu. Les boutons permettent de changer de page.' },
+            { name: 'Classement des points', value: `Les points de carte sont notamment obtenus avec ${cmd('discard')}. Changez de catégorie sans relancer la commande.` },
             { name: cmd('profil'), value: 'Affiche une carte de profil Canvas. Le propriétaire peut changer son fond avec le bouton.' },
             { name: cmd('collectioncard', 'user:<membre>'), value: 'Galerie des cartes possédées concernant le membre choisi.' },
             { name: cmd('profil', 'user:<membre>'), value: 'Résumé individuel du solde, des points et du rang.' }

@@ -7,7 +7,9 @@ const {
     MediaGalleryBuilder,
     MediaGalleryItemBuilder,
     MessageFlags,
-    SeparatorBuilder
+    SeparatorBuilder,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder
 } = require('discord.js');
 const Canvas = require("canvas");
 
@@ -55,6 +57,17 @@ const TOP_TYPES = Object.freeze({
     }
 });
 
+const getTopPickerReply = (user, expiresAt = componentLifecycle.createExpiresAt()) => {
+    const container = new ContainerBuilder()
+        .setAccentColor(TOP_ACCENT_COLOR)
+        .addTextDisplayComponents(text => text.setContent("## 🏆 Classements\nChoisis la catégorie que tu veux consulter."))
+        .addActionRowComponents(getTopCategoryRow(user.id, null, expiresAt));
+    return mentionSafety.withSafeMentions({
+        components: [container],
+        flags: MessageFlags.IsComponentsV2
+    });
+};
+
 const getTopReply = async (user, type = "money", page = 1, expiresAt = componentLifecycle.createExpiresAt()) => {
     await apiDB.ensureDatabaseSchema();
     const topType = normalizeType(type);
@@ -90,8 +103,21 @@ const getTopContainer = (user, type, pageRows, currentPage, totalPages, expiresA
 
     return container
         .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(getTopCategoryRow(user.id, type, expiresAt))
         .addActionRowComponents(getTopNavigationRow(user.id, type, currentPage, totalPages, expiresAt));
 }
+
+const getTopCategoryRow = (userID, selectedType, expiresAt) => new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+        .setCustomId(getTopCustomID("select", userID, selectedType || "money", 1, expiresAt))
+        .setPlaceholder("Choisir une catégorie")
+        .addOptions(Object.entries(TOP_TYPES).map(([value, config]) =>
+            new StringSelectMenuOptionBuilder()
+                .setLabel(config.label)
+                .setValue(value)
+                .setDefault(value === selectedType)
+        ))
+);
 
 const generateTopImage = async (client, type, pageRows, currentPage, totalPages) => {
     const config = TOP_TYPES[type];
@@ -201,6 +227,32 @@ const handleTopButton = async (client, interaction) => {
     return true;
 }
 
+const handleTopSelect = async (client, interaction) => {
+    const parsedInteraction = parseTopCustomID(interaction.customId);
+    if(!parsedInteraction || parsedInteraction.action !== "select") return false;
+
+    if(componentLifecycle.isExpired(parsedInteraction.expiresAt)){
+        await componentLifecycle.expireInteractedMessage(interaction, "top", interaction.commandId);
+        return true;
+    }
+
+    if(interaction.user.id !== parsedInteraction.userID){
+        await interaction.reply({
+            content: "Ce classement ne t'appartient pas.",
+            flags: MessageFlags.Ephemeral,
+            allowedMentions: mentionSafety.SAFE_ALLOWED_MENTIONS
+        });
+        return true;
+    }
+
+    const type = normalizeType(interaction.values[0]);
+    const expiresAt = componentLifecycle.createExpiresAt();
+    await interaction.deferUpdate();
+    await interaction.editReply(await getTopReply(interaction.user, type, 1, expiresAt));
+    componentLifecycle.scheduleInteractionExpiration(interaction, "top", expiresAt);
+    return true;
+}
+
 const parseTopCustomID = (customID) => {
     const parts = customID.split(":");
     if(parts.length != 6 || parts[0] != "top") return null;
@@ -228,7 +280,9 @@ const clampPage = (page, totalPages) => Math.min(Math.max(Number(page) || 1, 1),
 
 module.exports = {
     TOP_TYPES,
+    getTopPickerReply,
     getTopReply,
     handleTopButton,
+    handleTopSelect,
     generateTopImage
 };

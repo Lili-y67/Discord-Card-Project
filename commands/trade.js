@@ -13,6 +13,9 @@ module.exports = {
         if(partner.id === interaction.user.id || partner.bot){ await interaction.reply({ content: "Choisis un autre membre humain.", flags: MessageFlags.Ephemeral }); return; }
         await apiDB.prepareUser(interaction.user.id, interaction.user.username); await apiDB.prepareUser(partner.id, partner.username);
         const state = await tradeBuilder.createTrade(interaction, partner, interaction.options.getInteger("argent_proposé") || 0, interaction.options.getInteger("argent_demandé") || 0);
-        await interaction.reply(await tradeBuilder.getReply(state)); tradeBuilder.schedule(state);
+        const reply = await tradeBuilder.getReply(state);
+        reply.allowedMentions = { parse: [], users: [partner.id], roles: [], repliedUser: false };
+        await interaction.reply(reply);
+        tradeBuilder.schedule(state);
     }
 };

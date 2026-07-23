@@ -796,6 +796,14 @@ const getDailyQuestProgressRows = async (discordID, questDate) => {
     )
 }
 
+const getClaimedQuestIDs = async (discordID) => {
+    const rows = await DB.all(
+        `SELECT DISTINCT questID FROM ${questDailyProgressTB} WHERE discordID = ? AND claimed = 1`,
+        [discordID.toString()]
+    )
+    return rows.map(row => row.questID)
+}
+
 const getDailyQuestProgress = async (discordID, questDate, questID) => {
     return await DB.get(
         `SELECT * FROM ${questDailyProgressTB} WHERE discordID = ? AND questDate = ? AND questID = ?`,
@@ -1119,6 +1127,7 @@ module.exports = {
     setPickBoost,
     getActivePickBoostMultiplier,
     getDailyQuestProgressRows,
+    getClaimedQuestIDs,
     getDailyQuestProgress,
     upsertDailyQuestProgress,
     markDailyQuestClaimed,

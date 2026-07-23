@@ -163,6 +163,9 @@ client.on('interactionCreate', async interaction => {
 	}
 
 	if(interaction.isButton()){
+		if(await client.commands.get("roue")?.handleButton?.(client, interaction)){
+			return;
+		}
 		if(await questCore.handleQuestButton(client, interaction)){
 			return;
 		}
@@ -220,6 +223,9 @@ client.on('interactionCreate', async interaction => {
 			return;
 		}
 		if(await cardsListFunctions.handleCardsSelect(client, interaction)){
+			return;
+		}
+		if(await topFunctions.handleTopSelect(client, interaction)){
 			return;
 		}
 		if(await guildCollectionFunctions.handleGuildCollectionSelect(client, interaction)){
@@ -280,9 +286,6 @@ client.on('interactionCreate', async interaction => {
 
 	try {
 		await command.execute(interaction);
-		if(["collection", "collectioncard", "inv", "cards", "guildcollection"].includes(interaction.commandName)){
-			await questCore.trackEvent(interaction.user.id, "collection_viewed");
-		}
         console.log(interaction.commandName.toString() + " from " + interaction.user.username + " " + interaction.user.id.toString() + " -- ENDED at " + Date.now().toString() + " -- it took " + (Date.now()-startingDate).toString() + "ms")
 	} catch (error) {
 

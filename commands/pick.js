@@ -19,7 +19,7 @@ module.exports = {
 			return;
 		}
 		if(tryPick.picked){
-			await questCore.trackEvent(interaction.user.id, "card_picked")
+			await questCore.trackCardPick(interaction.user.id, tryPick.cardID)
 			await interaction.editReply(await pickFunctions.getPickReply(interaction.client, interaction.user, tryPick.cardID, tryPick.balanceChange));
 		}
 		else{

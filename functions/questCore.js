@@ -31,12 +31,20 @@ const DAILY_QUESTS = [
         reward: { xp: 35, cardPoints: 3 }
     },
     {
-        id: "collection_1",
-        title: "Inventaire propre",
-        description: "Consulter /collection ou /inv.",
-        event: "collection_viewed",
+        id: "pick_epic_1",
+        title: "Tirage épique",
+        description: "Tirer une carte Épique ou d’une rareté supérieure.",
+        event: "epic_or_better_picked",
         target: 1,
-        reward: { xp: 25, money: 20 }
+        reward: { xp: 100, money: 100, wheelTickets: 1 }
+    },
+    {
+        id: "pick_legendary_1",
+        title: "Coup de légende",
+        description: "Tirer une carte Légendaire ou d’une rareté supérieure.",
+        event: "legendary_or_better_picked",
+        target: 1,
+        reward: { xp: 180, cardPoints: 20, wheelTickets: 2 }
     },
     {
         id: "sell_1",
@@ -74,7 +82,12 @@ const DAILY_QUESTS = [
 
 const WHEEL_REWARDS = require("../data/wheel-rewards.json");
 
-const getQuestDate = () => new Date().toISOString().slice(0, 10);
+const getQuestDate = () => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+}).format(new Date());
 
 const getXPForNextLevel = (level) => 100 + Math.max(1, Number(level) || 1) * 75;
 
@@ -97,15 +110,22 @@ const getUserQuestState = async (discordID) => {
     await apiDB.prepareQuestUser(discordID);
     await normalizeLevel(discordID);
     const stats = await apiDB.getQuestUserStats(discordID);
-    const progressRows = await apiDB.getDailyQuestProgressRows(discordID, getQuestDate());
+    const questDate = getQuestDate();
+    const progressRows = await apiDB.getDailyQuestProgressRows(discordID, questDate);
     const progressByID = new Map(progressRows.map(row => [row.questID, row]));
+    const claimedQuestIDs = await apiDB.getClaimedQuestIDs(discordID);
 
     return {
         stats,
-        questDate: getQuestDate(),
+        questDate,
         quests: DAILY_QUESTS.map(quest => {
-            let tier = 1;
-            while(progressByID.get(getTierQuestID(quest, tier))?.claimed) tier += 1;
+            const claimedTiers = claimedQuestIDs.map(questID => {
+                if(questID === quest.id) return 1;
+                const prefix = `${quest.id}_tier`;
+                if(!questID.startsWith(prefix)) return 0;
+                return Number(questID.slice(prefix.length)) || 0;
+            });
+            const tier = Math.max(0, ...claimedTiers) + 1;
             const tierQuest = buildTierQuest(quest, tier);
             const row = progressByID.get(tierQuest.id);
             const progress = Math.min(Number(row?.progress) || 0, tierQuest.target);
@@ -162,6 +182,20 @@ const trackEvent = async (discordID, eventName, amount = 1) => {
     }
 
     return updated;
+};
+
+const trackCardPick = async (discordID, cardID) => {
+    const card = await apiDB.getACardFromID(cardID);
+    await trackEvent(discordID, "card_picked");
+    if(!card) return;
+
+    const rarityValue = Number(card.rarityValue) || 0;
+    if(rarityValue >= constants.MINVALUEFOREPIC){
+        await trackEvent(discordID, "epic_or_better_picked");
+    }
+    if(rarityValue >= constants.MINVALUEFORLEG){
+        await trackEvent(discordID, "legendary_or_better_picked");
+    }
 };
 
 const claimCompletedQuests = async (discordID) => {
@@ -389,6 +423,7 @@ module.exports = {
     getUserQuestState,
     trackMessage,
     trackEvent,
+    trackCardPick,
     claimCompletedQuests,
     spinWheel,
     createQuestEmbed,
